@@ -1,59 +1,125 @@
 import { useRef, useState } from "react";
 import HTMLFlipBook from "react-pageflip";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
 type CataloguePage = {
   id: number;
   title: string;
+  imageUrl?: string;
 };
 
 type CatalogueViewerProps = {
   pages: CataloguePage[];
+  zoom?: number;
+  soundOn?: boolean;
+  showGrid?: boolean;
 };
 
-const CatalogueViewer = ({ pages }: CatalogueViewerProps) => {
+const CatalogueViewer = ({
+  pages,
+  zoom = 100,
+  soundOn = true,
+  showGrid = false,
+}: CatalogueViewerProps) => {
   const bookRef = useRef<any>(null);
   const [currentPage, setCurrentPage] = useState(0);
-  const pageSound = useRef<HTMLAudioElement | null>(null);
+  const [lightboxPage, setLightboxPage] = useState<CataloguePage | null>(null);
+  const pageSoundRef = useRef<HTMLAudioElement | null>(null);
 
-if (!pageSound.current) {
-  pageSound.current = new Audio("/sounds/page-flip.mp3");
-}
+  if (!pageSoundRef.current) {
+    pageSoundRef.current = new Audio("/sounds/page-flip.mp3");
+  }
+
+  const playSound = () => {
+    if (!soundOn) return;
+    const audio = pageSoundRef.current!;
+    audio.currentTime = 0;
+    audio.play().catch(() => {});
+  };
 
   const getPageFlip = () => bookRef.current?.pageFlip?.();
 
-  const nextPage = () => {
-  pageSound.current!.currentTime = 0;
-  pageSound.current!.play();
-  getPageFlip()?.flipNext();
-};
+  const nextPage = () => { playSound(); getPageFlip()?.flipNext(); };
+  const previousPage = () => { playSound(); getPageFlip()?.flipPrev(); };
 
-  const previousPage = () => {
-  pageSound.current!.currentTime = 0;
-  pageSound.current!.play();
-  getPageFlip()?.flipPrev();
-};
+  const handleFlip = (event: { data: number }) => setCurrentPage(event.data);
 
-  const handleFlip = (event: { data: number }) => {
-  setCurrentPage(event.data);
-};
-  return (
-    <div className="min-h-screen bg-gray-200 flex flex-col items-center justify-center">
-      {/* BOOK AREA */}
-      {/* PAGE NUMBER */}
-      <div className="mt-6 text-gray-600 font-medium">
-        {currentPage + 1}
-        {currentPage + 2 <= pages.length && `–${currentPage + 2}`} of{" "}
-        {pages.length}
+  const scale = zoom / 100;
+  const baseW = 350;
+  const baseH = 500;
+  const w = Math.round(baseW * scale);
+  const h = Math.round(baseH * scale);
+
+  if (showGrid) {
+    return (
+      <div className="w-full max-w-6xl px-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          {pages.map((page) => (
+            <button
+              key={page.id}
+              onClick={() => setLightboxPage(page)}
+              className="group relative overflow-hidden rounded-lg border bg-white shadow-sm transition hover:shadow-md"
+            >
+              {page.imageUrl ? (
+                <img
+                  src={page.imageUrl}
+                  alt={page.title}
+                  className="aspect-[3/4] w-full object-cover"
+                />
+              ) : (
+                <div className="flex aspect-[3/4] items-center justify-center bg-muted">
+                  <span className="text-xs text-muted-foreground">{page.title}</span>
+                </div>
+              )}
+              <div className="absolute bottom-0 left-0 right-0 bg-black/50 py-1 text-center text-xs text-white opacity-0 transition group-hover:opacity-100">
+                Page {page.id}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Lightbox */}
+        {lightboxPage && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+            onClick={() => setLightboxPage(null)}
+          >
+            <button
+              className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+              onClick={() => setLightboxPage(null)}
+            >
+              <X className="h-5 w-5" />
+            </button>
+            {lightboxPage.imageUrl && (
+              <img
+                src={lightboxPage.imageUrl}
+                alt={lightboxPage.title}
+                className="max-h-[90vh] max-w-full rounded-lg object-contain"
+                onClick={(e) => e.stopPropagation()}
+              />
+            )}
+          </div>
+        )}
       </div>
-      <div className="flex items-center gap-6">
-        {/* LEFT BUTTON */}
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-4">
+      {/* Page counter */}
+      <div className="rounded-full bg-background/80 px-3 py-1 text-sm font-medium text-muted-foreground shadow-sm backdrop-blur">
+        {currentPage + 1}
+        {currentPage + 2 <= pages.length && `–${currentPage + 2}`} / {pages.length}
+      </div>
+
+      <div className="flex items-center gap-4">
+        {/* Prev */}
         <button
           onClick={previousPage}
           disabled={currentPage === 0}
-          className="p-3 rounded-full bg-white shadow-lg hover:bg-gray-100 disabled:opacity-30"
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-background shadow-md transition hover:bg-muted disabled:opacity-30"
         >
-          <ChevronLeft size={30} />
+          <ChevronLeft className="h-6 w-6" />
         </button>
 
         {/* BOOK */}
@@ -83,13 +149,12 @@ if (!pageSound.current) {
           swipeDistance={30}
           clickEventForward={false}
           renderOnlyPageLengthChange={false}
-          showPageCorners={true}
           disableFlipByClick={false}
           onFlip={handleFlip}
           onChangeState={(e) => {
             if (e.data === "user_fold") {
-              pageSound.current!.currentTime = 0;
-              pageSound.current!.play();
+              pageSound.currentTime = 0;
+              pageSound.play();
             }
           }}
         >
@@ -109,17 +174,15 @@ if (!pageSound.current) {
           ))}
         </HTMLFlipBook>
 
-        {/* RIGHT BUTTON */}
+        {/* Next */}
         <button
           onClick={nextPage}
-          disabled={currentPage >= pages.length - 1}
-          className="p-3 rounded-full bg-white shadow-lg hover:bg-gray-100 disabled:opacity-30"
+          disabled={currentPage >= pages.length - 2}
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-background shadow-md transition hover:bg-muted disabled:opacity-30"
         >
-          <ChevronRight size={30} />
+          <ChevronRight className="h-6 w-6" />
         </button>
       </div>
-
-      
     </div>
   );
 };
