@@ -23,17 +23,26 @@ const ManagePages = () => {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
 
-  const load = async () => {
-    if (!catalogId) return;
-    try {
-      const data = await fetchCatalogPages(catalogId);
-      setPages(data);
-    } catch {
-      setError("Failed to load pages");
-    } finally {
-      setLoading(false);
-    }
-  };
+  
+const load = async () => {
+  if (!catalogId) return;
+
+  console.log("LOADING PAGES:", catalogId);
+
+  try {
+    const data = await fetchCatalogPages(catalogId);
+
+    console.log("PAGES RESPONSE:", data);
+
+    setPages(data);
+    setError("");
+  } catch (error: any) {
+    console.error("PAGE LOAD ERROR:", error);
+    setError(error.message || "Failed to load pages");
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => { load(); }, [catalogId]);
 

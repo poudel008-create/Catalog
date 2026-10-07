@@ -77,15 +77,17 @@ export interface CatalogPage {
 export const fetchCatalogPages = async (
   catalogId: string
 ): Promise<CatalogPage[]> => {
+  console.log("FETCHING:", `${BASE}/catalog-pages/${catalogId}`);
+
   const res = await fetch(
-    `${BASE}/catalog-pages/${catalogId}`,
-    {
-      method: "GET",
-      headers: authHeaders(),
-    }
+    `${BASE}/catalog-pages/${catalogId}`
   );
 
+  console.log("STATUS:", res.status);
+
   const data = await res.json();
+
+  console.log("DATA:", data);
 
   if (!res.ok) {
     throw new Error(
@@ -100,13 +102,29 @@ export const uploadCatalogPage = async (
   catalogId: string,
   formData: FormData
 ): Promise<CatalogPage> => {
+  const token = localStorage.getItem("accessToken");
+
+  console.log("TOKEN EXISTS:", !!token);
+  console.log("TOKEN LENGTH:", token?.length);
+
   const res = await fetch(`${BASE}/catalog-pages/${catalogId}`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
     body: formData,
   });
+
+  console.log("UPLOAD STATUS:", res.status);
+
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message || "Failed to upload page");
+
+  console.log("UPLOAD RESPONSE:", data);
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to upload page");
+  }
+
   return data.page;
 };
 

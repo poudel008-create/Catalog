@@ -35,7 +35,15 @@ export const loginUser = async (
     throw new Error(data.message || "Login failed");
   }
 
-  return data;
+  return {
+    user: {
+      id: data.user.id,
+      fullName: data.user.name,
+      email: data.user.email,
+      role: data.user.role,
+    },
+    accessToken: data.token,
+  };
 };
 
 export const logoutUser = async () => {
