@@ -4,18 +4,25 @@ import { BookOpen, FolderTree, Layers3, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AdminLayout from "./layout";
+import { useAuth } from "../../hooks/context/authContext";
 import { fetchCatalogs, type Catalog } from "../../services/catalogService";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
+  const { accessToken } = useAuth();
   const [catalogs, setCatalogs] = useState<Catalog[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchCatalogs()
-      .then(setCatalogs)
-      .finally(() => setLoading(false));
-  }, []);
+ useEffect(() => {
+  if (!accessToken) {
+    setLoading(false);
+    return;
+  }
+
+  fetchCatalogs(accessToken)
+    .then(setCatalogs)
+    .finally(() => setLoading(false));
+}, [accessToken]);
 
   const stats = [
     { label: "Total Catalogues", value: catalogs.length, icon: BookOpen },

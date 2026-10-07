@@ -6,6 +6,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AdminLayout from "./layout";
+import { useAuth } from "../../hooks/context/authContext";
 import {
   fetchCatalogPages,
   uploadCatalogPage,
@@ -16,6 +17,7 @@ import {
 const ManagePages = () => {
   const { catalogId } = useParams<{ catalogId: string }>();
   const navigate = useNavigate();
+  const {accessToken}= useAuth()
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [pages, setPages] = useState<CatalogPage[]>([]);
@@ -55,7 +57,7 @@ const load = async () => {
         const fd = new FormData();
         fd.append("page", files[i]);
         fd.append("pageNumber", String(pages.length + i + 1));
-        const page = await uploadCatalogPage(catalogId, fd);
+        const page = await uploadCatalogPage(catalogId, fd, accessToken);
         setPages((prev) => [...prev, page]);
       }
     } catch (e: any) {
@@ -69,7 +71,7 @@ const load = async () => {
   const handleDelete = async (pageId: string) => {
     if (!confirm("Delete this page?")) return;
     try {
-      await deleteCatalogPage(pageId);
+      await deleteCatalogPage(pageId, accessToken);
       setPages((prev) => prev.filter((p) => p._id !== pageId));
     } catch (e: any) {
       alert(e.message);

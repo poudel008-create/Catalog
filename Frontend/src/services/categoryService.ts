@@ -1,41 +1,34 @@
 const BASE = "http://localhost:5000/api";
 
-const authHeaders = () => ({
-  "Content-Type": "application/json",
-  Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-});
-
 export interface Category {
   _id: string;
   name: string;
   slug: string;
   description?: string;
   subCategoryCount: number;
-};
+}
 
-// GET ALL CATEGORIES
-export const fetchCategories = async (): Promise<Category[]> => {
-  const res = await fetch(`${BASE}/categories`);
+// =========================
+// AUTH HEADERS
+// =========================
+const authHeaders = (accessToken: string) => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${accessToken}`,
+});
 
-  const data = await res.json();
-
-  if (!res.ok) {
-    throw new Error(data.message || "Failed to fetch categories");
-  }
-
-  return data.categories ?? [];
-};
-
+// =========================
 // CREATE CATEGORY
+// =========================
 export const createCategory = async (
   body: {
     name: string;
     description?: string;
-  }
+  },
+  accessToken: string
 ): Promise<Category> => {
   const res = await fetch(`${BASE}/categories`, {
     method: "POST",
-    headers: authHeaders(),
+    headers: authHeaders(accessToken),
     body: JSON.stringify(body),
   });
 
@@ -48,17 +41,20 @@ export const createCategory = async (
   return data.category;
 };
 
+// =========================
 // UPDATE CATEGORY
+// =========================
 export const updateCategory = async (
   id: string,
   body: {
     name: string;
     description?: string;
-  }
+  },
+  accessToken: string
 ): Promise<Category> => {
   const res = await fetch(`${BASE}/categories/${id}`, {
     method: "PUT",
-    headers: authHeaders(),
+    headers: authHeaders(accessToken),
     body: JSON.stringify(body),
   });
 
@@ -71,11 +67,16 @@ export const updateCategory = async (
   return data.category;
 };
 
+// =========================
 // DELETE CATEGORY
-export const deleteCategory = async (id: string): Promise<void> => {
+// =========================
+export const deleteCategory = async (
+  id: string,
+  accessToken: string
+): Promise<void> => {
   const res = await fetch(`${BASE}/categories/${id}`, {
     method: "DELETE",
-    headers: authHeaders(),
+    headers: authHeaders(accessToken),
   });
 
   const data = await res.json();
@@ -83,4 +84,58 @@ export const deleteCategory = async (id: string): Promise<void> => {
   if (!res.ok) {
     throw new Error(data.message || "Failed to delete category");
   }
+};
+
+// =========================
+// GET ALL CATEGORIES
+// PUBLIC
+// =========================
+export const fetchCategories = async (): Promise<Category[]> => {
+  const res = await fetch(`${BASE}/categories`);
+
+  console.log("CATEGORY API STATUS:", res.status);
+
+  const data = await res.json();
+
+  console.log("CATEGORY API DATA:", data);
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to fetch categories");
+  }
+
+  return data.categories ?? [];
+};
+
+// =========================
+// SUB CATEGORY
+// =========================
+export interface SubCategory {
+  _id: string;
+  name: string;
+  slug: string;
+  category:
+    | string
+    | {
+        _id: string;
+        name: string;
+        slug: string;
+      };
+}
+
+export const fetchSubCategories = async (
+  categoryId?: string
+): Promise<SubCategory[]> => {
+  const url = categoryId
+    ? `${BASE}/subcategories?category=${categoryId}`
+    : `${BASE}/subcategories`;
+
+  const res = await fetch(url);
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to fetch sub-categories");
+  }
+
+  return data.subCategories ?? [];
 };

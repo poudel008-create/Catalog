@@ -14,10 +14,7 @@ import upload from "../middleware/upload";
 const router = express.Router();
 
 // PUBLIC - Get pages
-router.get(
-  "/:catalogId",
-  getCatalogPages
-);
+router.get("/:catalogId", getCatalogPages);
 
 // ADMIN - Upload page
 router.post(
