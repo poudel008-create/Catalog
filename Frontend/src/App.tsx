@@ -1,8 +1,10 @@
 import React from 'react'
-
+import Pages from './pages/pages'
 const App = () => {
   return (
-    <div>App</div>
+    <div>
+      <Pages/>
+    </div>
   )
 }
 
