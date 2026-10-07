@@ -24,6 +24,7 @@ const catalogPageSchema = new Schema<ICatalogPage>(
       type: String,
       required: true,
     },
+    
 
     publicId: {
       type: String,

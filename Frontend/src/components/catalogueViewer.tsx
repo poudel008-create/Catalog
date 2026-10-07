@@ -83,12 +83,13 @@ if (!pageSound.current) {
           swipeDistance={30}
           clickEventForward={false}
           renderOnlyPageLengthChange={false}
+          showPageCorners={true}
           disableFlipByClick={false}
           onFlip={handleFlip}
           onChangeState={(e) => {
             if (e.data === "user_fold") {
-              pageSound.currentTime = 0;
-              pageSound.play();
+              pageSound.current!.currentTime = 0;
+              pageSound.current!.play();
             }
           }}
         >

@@ -11,7 +11,7 @@ import catalogpageRoute from "./Routes/catalogpageRoute"
 const app = express();
 
 const CorsOptions = {
-  origin: "http://localhost:5173",
+  origin: "*",
   credentials: true,
 };
 
