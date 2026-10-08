@@ -80,7 +80,7 @@ export const getCatalogs = async (
 ) => {
   try {
     const catalogs = await Catalog.find({
-      published: true,
+      published:true,
     }).sort({ createdAt: -1 });
 
     res.status(200).json({

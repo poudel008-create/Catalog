@@ -19,6 +19,7 @@ const catalogSchema = new Schema<ICatalog>(
     description: {
       type: String,
     },
+  
 
     coverImage: {
       type: String,

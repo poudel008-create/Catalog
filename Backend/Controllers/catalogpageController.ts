@@ -11,7 +11,7 @@ export const uploadCatalogPage = async (
 ) => {
   try {
     const catalogId = req.params.catalogId as string;
-    const { pageNumber } = req.body;
+    const { pageNumber,category,subcategory } = req.body;
 
     if (!req.file) {
       return res.status(400).json({
@@ -43,6 +43,8 @@ export const uploadCatalogPage = async (
         const page = await CatalogPage.create({
           catalogId,
           pageNumber: Number(pageNumber),
+          category,
+          subcategory,
           imageUrl: result.secure_url,
           publicId: result.public_id,
         });
@@ -94,12 +96,14 @@ export const updateCatalogPage = async (
 ) => {
   try {
     const pageId = req.params.id as string;
-    const { pageNumber } = req.body;
+    const { pageNumber,category,subcategory } = req.body;
 
     const page = await CatalogPage.findByIdAndUpdate(
       pageId,
       {
         pageNumber: Number(pageNumber),
+        category,
+        subcategory,
       },
       {
         new: true,

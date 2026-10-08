@@ -3,6 +3,8 @@ import mongoose, { Document, Schema } from "mongoose";
 export interface ICatalogPage extends Document {
   catalogId: mongoose.Types.ObjectId;
   pageNumber: number;
+  category?: string;
+  subcategory?: string;
   imageUrl: string;
   publicId: string;
 }
@@ -19,12 +21,20 @@ const catalogPageSchema = new Schema<ICatalogPage>(
       type: Number,
       required: true,
     },
+    category: {
+      type: String,
+      enum: ["bathroom", "kitchen", "living-room", "outdoor"]
+    },
+    subcategory: {
+      type: String,
+      enum: ["wall-tile", "floor-tile", "vitrified", "ceramic"]
+    },
 
     imageUrl: {
       type: String,
       required: true,
     },
-    
+
 
     publicId: {
       type: String,
