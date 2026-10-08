@@ -8,17 +8,11 @@ export interface Category {
   subCategoryCount: number;
 }
 
-// =========================
-// AUTH HEADERS
-// =========================
 const authHeaders = (accessToken: string) => ({
   "Content-Type": "application/json",
   Authorization: `Bearer ${accessToken}`,
 });
 
-// =========================
-// CREATE CATEGORY
-// =========================
 export const createCategory = async (
   body: {
     name: string;
@@ -41,9 +35,6 @@ export const createCategory = async (
   return data.category;
 };
 
-// =========================
-// UPDATE CATEGORY
-// =========================
 export const updateCategory = async (
   id: string,
   body: {
@@ -67,9 +58,6 @@ export const updateCategory = async (
   return data.category;
 };
 
-// =========================
-// DELETE CATEGORY
-// =========================
 export const deleteCategory = async (
   id: string,
   accessToken: string
@@ -86,10 +74,6 @@ export const deleteCategory = async (
   }
 };
 
-// =========================
-// GET ALL CATEGORIES
-// PUBLIC
-// =========================
 export const fetchCategories = async (): Promise<Category[]> => {
   const res = await fetch(`${BASE}/categories`);
 
@@ -106,9 +90,6 @@ export const fetchCategories = async (): Promise<Category[]> => {
   return data.categories ?? [];
 };
 
-// =========================
-// SUB CATEGORY
-// =========================
 export interface SubCategory {
   _id: string;
   name: string;

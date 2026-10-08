@@ -46,25 +46,6 @@ export const loginUser = async (
   };
 };
 
-
-export const refreshAccessToken = async (): Promise<string> => {
-  const response = await fetch(
-    "http://localhost:5000/api/auth/refresh",
-    {
-      method: "POST",
-      credentials: "include",
-    }
-  );
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.message || "Refresh token expired");
-  }
-
-  return data.accessToken;
-};
-
 export const logoutUser = async () => {
   const response = await fetch(`${API_URL}/logout`, {
     method: "POST",

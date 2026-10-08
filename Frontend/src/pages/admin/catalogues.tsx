@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, Plus, Trash2, Eye, EyeOff, ArrowLeft, Pencil, ImageOff } from "lucide-react";
+import {
+  BookOpen,
+  Plus,
+  Trash2,
+  Eye,
+  EyeOff,
+  ArrowLeft,
+  Pencil,
+  ImageOff,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "../../hooks/context/authContext";
@@ -19,72 +28,65 @@ const AdminCatalogues = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-useEffect(() => {
-  console.log("CATALOG TOKEN:", accessToken);
-  console.log("TOKEN EXISTS:", !!accessToken);
+  useEffect(() => {
+    console.log("CATALOG TOKEN:", accessToken);
+    console.log("TOKEN EXISTS:", !!accessToken);
 
-  if (!accessToken) {
-    setLoading(false);
-    setError("Access token is missing");
-    return;
-  }
-
-  fetchCatalogs(accessToken)
-    .then((data) => {
-      console.log("CATALOG DATA:", data);
-      setCatalogs(data);
-    })
-    .catch((error) => {
-      console.error("CATALOG LOAD ERROR:", error);
-      setError(error.message || "Failed to load catalogues");
-    })
-    .finally(() => {
+    if (!accessToken) {
       setLoading(false);
-    });
-}, [accessToken]);
+      setError("Access token is missing");
+      return;
+    }
 
+    fetchCatalogs(accessToken)
+      .then((data) => {
+        console.log("CATALOG DATA:", data);
+        setCatalogs(data);
+      })
+      .catch((error) => {
+        console.error("CATALOG LOAD ERROR:", error);
+        setError(error.message || "Failed to load catalogues");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [accessToken]);
 
   const handleDelete = async (id: string) => {
-  if (!confirm("Delete this catalogue and all its pages?")) return;
+    if (!confirm("Delete this catalogue and all its pages?")) return;
 
-  if (!accessToken) {
-    alert("Access token is missing");
-    return;
-  }
+    if (!accessToken) {
+      alert("Access token is missing");
+      return;
+    }
 
-  try {
-    await deleteCatalog(id, accessToken);
+    try {
+      await deleteCatalog(id, accessToken);
 
-    setCatalogs((prev) =>
-      prev.filter((c) => c._id !== id)
-    );
-  } catch (e: any) {
-    alert(e.message);
-  }
-};
+      setCatalogs((prev) => prev.filter((c) => c._id !== id));
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
 
   const handleTogglePublish = async (cat: Catalog) => {
-  if (!accessToken) {
-    alert("You are not authenticated");
-    return;
-  }
+    if (!accessToken) {
+      alert("You are not authenticated");
+      return;
+    }
 
-  try {
-    const updated = await updateCatalog(
-      cat._id,
-      { published: !cat.published },
-      accessToken
-    );
+    try {
+      const updated = await updateCatalog(
+        cat._id,
+        { published: !cat.published },
+        accessToken,
+      );
 
-    setCatalogs((prev) =>
-      prev.map((c) =>
-        c._id === cat._id ? updated : c
-      )
-    );
-  } catch (e: any) {
-    alert(e.message);
-  }
-};
+      setCatalogs((prev) => prev.map((c) => (c._id === cat._id ? updated : c)));
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
 
   return (
     <AdminLayout>
@@ -92,15 +94,24 @@ useEffect(() => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/admin/dashboard")}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/admin/dashboard")}
+            >
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
               <h1 className="text-2xl font-bold">Catalogues</h1>
-              <p className="text-sm text-muted-foreground">Manage all your catalogues</p>
+              <p className="text-sm text-muted-foreground">
+                Manage all your catalogues
+              </p>
             </div>
           </div>
-          <Button onClick={() => navigate("/admin/catalogues/add")} className="gap-2">
+          <Button
+            onClick={() => navigate("/admin/catalogues/add")}
+            className="gap-2"
+          >
             <Plus className="h-4 w-4" />
             Add Catalogue
           </Button>
@@ -119,7 +130,10 @@ useEffect(() => {
             <CardContent className="flex flex-col items-center justify-center gap-4 py-16">
               <BookOpen className="h-12 w-12 text-muted-foreground" />
               <p className="text-muted-foreground">No catalogues yet</p>
-              <Button onClick={() => navigate("/admin/catalogues/add")} className="gap-2">
+              <Button
+                onClick={() => navigate("/admin/catalogues/add")}
+                className="gap-2"
+              >
                 <Plus className="h-4 w-4" /> Add Catalogue
               </Button>
             </CardContent>
@@ -162,15 +176,34 @@ useEffect(() => {
                   </div>
 
                   <div className="flex gap-2">
+                    {/* EDIT CATALOGUE */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() =>
+                        navigate(`/admin/catalogues/${cat._id}/edit`)
+                      }
+                      title="Edit Catalogue"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Edit
+                    </Button>
+
+                    {/* MANAGE PAGES */}
                     <Button
                       variant="outline"
                       size="sm"
                       className="flex-1 gap-1.5"
-                      onClick={() => navigate(`/admin/catalogues/${cat._id}/pages`)}
+                      onClick={() =>
+                        navigate(`/admin/catalogues/${cat._id}/pages`)
+                      }
                     >
-                      <Pencil className="h-3.5 w-3.5" />
+                      <BookOpen className="h-3.5 w-3.5" />
                       Manage Pages
                     </Button>
+
+                    {/* PUBLISH / UNPUBLISH */}
                     <Button
                       variant="outline"
                       size="icon-sm"
@@ -183,10 +216,13 @@ useEffect(() => {
                         <Eye className="h-3.5 w-3.5" />
                       )}
                     </Button>
+
+                    {/* DELETE */}
                     <Button
                       variant="destructive"
                       size="icon-sm"
                       onClick={() => handleDelete(cat._id)}
+                      title="Delete Catalogue"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
