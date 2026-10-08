@@ -1,4 +1,4 @@
-const BASE = "http://localhost:5000/api";
+const BASE = "https://catalog-jti1.onrender.com/api";
 
 const authHeaders = (accessToken: string) => ({
   "Content-Type": "application/json",
