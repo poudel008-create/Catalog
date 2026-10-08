@@ -10,6 +10,7 @@ import AdminCategories from "./pages/admin/categories";
 import AdminSubCategories from "./pages/admin/subcategories";
 import ProtectedRoute from "./components/protectedRoute";
 import NotFound from "./components/notFound";
+import EditCatalogue from "./pages/admin/editCatalogue";
 
 const App = () => {
   return (
@@ -26,6 +27,7 @@ const App = () => {
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/catalogues" element={<AdminCatalogues />} />
           <Route path="/admin/catalogues/add" element={<AddCatalogue />} />
+          <Route path="admin/catalogues/:id/edit" element={<EditCatalogue/>}/>
           <Route path="/admin/catalogues/:catalogId/pages" element={<ManagePages />} />
           <Route path="/admin/categories" element={<AdminCategories />} />
           <Route path="/admin/subcategories" element={<AdminSubCategories />} />

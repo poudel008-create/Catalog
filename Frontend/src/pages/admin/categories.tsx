@@ -1,25 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  ArrowLeft,
-  Plus,
-  Pencil,
-  Trash2,
-  FolderTree,
-  Check,
-  X,
-} from "lucide-react";
-
+import {ArrowLeft,  Plus,  Pencil, Trash2, FolderTree, Check, X,} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AdminLayout from "./layout";
 import { useAuth } from "../../hooks/context/authContext";
-import {
-  fetchCategories,
-  createCategory,
-  updateCategory,
-  deleteCategory,
+import {fetchCategories, createCategory, updateCategory, deleteCategory,
   type Category,
 } from "@/services/categoryService";
 
@@ -42,9 +29,6 @@ const AdminCategories = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
 
-  // =========================
-  // LOAD CATEGORIES
-  // =========================
   useEffect(() => {
     const loadCategories = async () => {
       try {
@@ -68,9 +52,6 @@ const AdminCategories = () => {
     loadCategories();
   }, []);
 
-  // =========================
-  // ADD CATEGORY
-  // =========================
   const handleAdd = async () => {
     if (!newName.trim()) return;
 
@@ -91,9 +72,6 @@ const AdminCategories = () => {
     }
   };
 
-  // =========================
-  // DELETE CATEGORY
-  // =========================
   const handleDelete = async (id: string) => {
     try {
       setError("");
@@ -110,17 +88,11 @@ const AdminCategories = () => {
     }
   };
 
-  // =========================
-  // START EDIT
-  // =========================
   const startEdit = (cat: Category) => {
     setEditId(cat._id);
     setEditName(cat.name);
   };
 
-  // =========================
-  // CONFIRM EDIT
-  // =========================
   const confirmEdit = async () => {
     if (!editName.trim() || !editId) return;
 
@@ -146,9 +118,6 @@ const AdminCategories = () => {
     }
   };
 
-  // =========================
-  // CANCEL EDIT
-  // =========================
   const cancelEdit = () => {
     setEditId(null);
     setEditName("");

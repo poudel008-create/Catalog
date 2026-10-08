@@ -13,19 +13,25 @@ import upload from "../middleware/upload";
 
 const router = express.Router();
 
-// PUBLIC - Get pages
-router.get("/:catalogId", getCatalogPages);
+// ==================== PUBLIC - Get Pages ====================
 
-// ADMIN - Upload page
+router.get(
+  "/:catalogId",
+  getCatalogPages
+);
+
+// ==================== ADMIN - Upload Multiple Pages ====================
+
 router.post(
   "/:catalogId",
   authMiddleware,
   authorizeRoles("admin"),
-  upload.single("page"),
+  upload.array("pages", 50),
   uploadCatalogPage
 );
 
-// ADMIN - Update page number
+// ==================== ADMIN - Update Page Number ====================
+
 router.put(
   "/page/:id",
   authMiddleware,
@@ -33,7 +39,8 @@ router.put(
   updateCatalogPage
 );
 
-// ADMIN - Delete page
+// ==================== ADMIN - Delete Page ====================
+
 router.delete(
   "/page/:id",
   authMiddleware,

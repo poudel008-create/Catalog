@@ -67,25 +67,6 @@ export const createCatalog = async (
 
   return data.catalog;
 };
-export const updateCatalog = async (
-  id: string,
-  body: Partial<Pick<Catalog, "title" | "description" | "published">>,
-  accessToken: string
-): Promise<Catalog> => {
-  const res = await fetch(`${BASE}/catalogs/${id}`, {
-    method: "PUT",
-    headers: authHeaders(accessToken),
-    body: JSON.stringify(body),
-  });
-
-  const data = await res.json();
-
-  if (!res.ok) {
-    throw new Error(data.message || "Failed to update catalog");
-  }
-
-  return data.catalog;
-};
 
 export const deleteCatalog = async (
   id: string,
@@ -138,7 +119,7 @@ export const uploadCatalogPage = async (
   catalogId: string,
   formData: FormData,
   accessToken: string
-): Promise<CatalogPage> => {
+): Promise<CatalogPage[]> => {
   console.log("TOKEN EXISTS:", !!accessToken);
   console.log("TOKEN LENGTH:", accessToken?.length);
 
@@ -161,11 +142,11 @@ export const uploadCatalogPage = async (
 
   if (!res.ok) {
     throw new Error(
-      data.message || "Failed to upload page"
+      data.message || "Failed to upload pages"
     );
   }
 
-  return data.page;
+  return data.pages ?? [];
 };
 
 export const deleteCatalogPage = async (
@@ -202,4 +183,49 @@ export const fetchPublishedCatalogs = async (): Promise<Catalog[]> => {
   }
 
   return data.catalogs ?? [];
+};
+
+export const fetchCatalogById = async (
+  id: string,
+  accessToken: string
+): Promise<Catalog> => {
+  const res = await fetch(`${BASE}/catalogs/${id}`, {
+    method: "GET",
+    headers: authHeaders(accessToken),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(
+      data.message || "Failed to fetch catalog"
+    );
+  }
+
+  return data.catalog;
+};
+
+
+export const updateCatalog = async (
+  id: string,
+  formData: FormData,
+  accessToken: string
+): Promise<Catalog> => {
+  const res = await fetch(`${BASE}/catalogs/${id}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: formData,
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(
+      data.message || "Failed to update catalog"
+    );
+  }
+
+  return data.catalog;
 };

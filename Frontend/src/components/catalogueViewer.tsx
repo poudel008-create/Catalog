@@ -44,11 +44,6 @@ const CatalogueViewer = ({
   const [stageWidth, setStageWidth] = useState(1000);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // --------------------------------
-  // Pages: with a hard cover the book needs an EVEN number of pages,
-  // otherwise the back cover gets paired with another page instead of
-  // standing alone. Pad with a blank page before the back cover if needed.
-  // --------------------------------
   const bookPages = useMemo<CataloguePage[]>(() => {
     if (pages.length > 2 && pages.length % 2 === 1) {
       const copy = [...pages];
@@ -64,9 +59,6 @@ const CatalogueViewer = ({
 
   const total = bookPages.length;
 
-  // --------------------------------
-  // Sound (created once)
-  // --------------------------------
   useEffect(() => {
     const audio = new Audio("/sounds/page-flip.mp3");
     audio.volume = 0.6;
@@ -83,9 +75,6 @@ const CatalogueViewer = ({
     });
   }, [soundOn]);
 
-  // --------------------------------
-  // Responsive stage
-  // --------------------------------
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
@@ -127,9 +116,6 @@ const CatalogueViewer = ({
   );
   const h = Math.round((w * BASE_H) / BASE_W);
 
-  // --------------------------------
-  // Navigation
-  // --------------------------------
   const getPageFlip = () => bookRef.current?.pageFlip?.();
 
   const isFirstPage = currentPage === 0;
@@ -245,10 +231,6 @@ const CatalogueViewer = ({
   // FLIPBOOK VIEW
   // --------------------------------
 
-  // Centering logic (landscape only):
-  //  - front cover alone  -> sits on the right half -> shift left by w/2
-  //  - back cover alone   -> sits on the left half  -> shift right by w/2
-  //  - inner spreads      -> no shift
   let shiftX = 0;
   if (!isPortrait) {
     if (isFirstPage) shiftX = -w / 2;
