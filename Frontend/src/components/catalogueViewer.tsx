@@ -15,6 +15,7 @@ type CataloguePage = {
   title: string;
   imageUrl?: string;
   blank?: boolean;
+  isCover?: boolean;
 };
 
 type CatalogueViewerProps = {
@@ -366,7 +367,7 @@ const CatalogueViewer = ({
                 onFlip={handleFlip}
               >
                 {bookPages.map((page, index) => {
-                  const isCover = index === 0 || index === total - 1;
+                  const isCover = page.isCover ?? (index === 0 || index === total - 1);
                   // with showCover: even index = right page, odd = left page
                   const isLeftPage = index % 2 === 1;
 
