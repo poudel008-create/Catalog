@@ -2,9 +2,9 @@ import { Request, Response } from "express";
 import Category from "../Models/categoryModel";
 import SubCategory from "../Models/subCategoryModel";
 import { slugify } from "../utils/slugify";
+import { AuthRequest } from "../middleware/authMiddleware";
 
-// GET /api/categories  (public)
-// Returns every category with its sub-category count.
+
 export const getCategories = async (_req: Request, res: Response) => {
   try {
     const categories = await Category.find().sort({ name: 1 });
@@ -33,7 +33,7 @@ export const getCategories = async (_req: Request, res: Response) => {
 };
 
 // POST /api/categories  (admin)
-export const createCategory = async (req: Request, res: Response) => {
+export const createCategory = async (req: AuthRequest, res: Response) => {
   try {
     const { name, description } = req.body;
 
@@ -69,7 +69,7 @@ export const createCategory = async (req: Request, res: Response) => {
 };
 
 // PUT /api/categories/:id  (admin)
-export const updateCategory = async (req: Request, res: Response) => {
+export const updateCategory = async (req: AuthRequest, res: Response) => {
   try {
     const { name, description } = req.body;
 
@@ -121,7 +121,7 @@ export const updateCategory = async (req: Request, res: Response) => {
 
 // DELETE /api/categories/:id  (admin)
 // Also removes every sub-category that belongs to it.
-export const deleteCategory = async (req: Request, res: Response) => {
+export const deleteCategory = async (req: AuthRequest, res: Response) => {
   try {
     const category = await Category.findByIdAndDelete(req.params.id);
 

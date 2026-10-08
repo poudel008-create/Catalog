@@ -16,26 +16,29 @@ const router = express.Router();
 // PUBLIC - Get pages
 router.get("/:catalogId", getCatalogPages);
 
-// ADMIN - Upload page
+// ADMIN
+
+//  Add one or multiple pages
 router.post(
   "/:catalogId",
   authMiddleware,
   authorizeRoles("admin"),
-  upload.single("page"),
+  upload.array("page", 20),
   uploadCatalogPage
 );
 
-// ADMIN - Update page number
+// Update one or multiple pages
 router.put(
-  "/page/:id",
+  "/:catalogId/pages",
   authMiddleware,
   authorizeRoles("admin"),
+  upload.array("page", 20),
   updateCatalogPage
 );
 
-// ADMIN - Delete page
+// Delete one or multiple pages
 router.delete(
-  "/page/:id",
+  "/pages",
   authMiddleware,
   authorizeRoles("admin"),
   deleteCatalogPage

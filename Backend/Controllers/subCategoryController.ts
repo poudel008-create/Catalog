@@ -2,9 +2,9 @@ import { Request, Response } from "express";
 import Category from "../Models/categoryModel";
 import SubCategory from "../Models/subCategoryModel";
 import { slugify } from "../utils/slugify";
+import { AuthRequest } from "../middleware/authMiddleware";
 
-// GET /api/subcategories            (public) -> all
-// GET /api/subcategories?category=… (public) -> scoped to one category
+
 export const getSubCategories = async (req: Request, res: Response) => {
   try {
     const { category } = req.query;
@@ -25,7 +25,7 @@ export const getSubCategories = async (req: Request, res: Response) => {
 };
 
 // POST /api/subcategories  (admin)
-export const createSubCategory = async (req: Request, res: Response) => {
+export const createSubCategory = async (req: AuthRequest, res: Response) => {
   try {
     const { name, category } = req.body;
 
@@ -74,7 +74,7 @@ export const createSubCategory = async (req: Request, res: Response) => {
 };
 
 // PUT /api/subcategories/:id  (admin)
-export const updateSubCategory = async (req: Request, res: Response) => {
+export const updateSubCategory = async (req: AuthRequest, res: Response) => {
   try {
     const { name, category } = req.body;
 
@@ -129,7 +129,7 @@ export const updateSubCategory = async (req: Request, res: Response) => {
 };
 
 // DELETE /api/subcategories/:id  (admin)
-export const deleteSubCategory = async (req: Request, res: Response) => {
+export const deleteSubCategory = async (req: AuthRequest, res: Response) => {
   try {
     const subCategory = await SubCategory.findByIdAndDelete(req.params.id);
 

@@ -26,7 +26,7 @@ export const authMiddleware = (
 
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET as string
+      process.env.ACCESS_TOKEN_SECRET as string
     ) as {
       id: string;
       role: "admin" | "user";

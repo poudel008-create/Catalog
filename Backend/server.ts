@@ -10,7 +10,7 @@ import catalogRoute from "./Routes/catalogRoute";
 import catalogpageRoute from "./Routes/catalogpageRoute"
 import categoryRoute from "./Routes/categoryRoute"
 import subCategoryRoute from "./Routes/subCategoryRoute";
-import cookieParser from "cookie-parser";
+
 
 const app = express();
 
