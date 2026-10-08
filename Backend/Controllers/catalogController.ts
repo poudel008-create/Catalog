@@ -123,24 +123,20 @@ export const getCatalog = async (
 };
 
 // UPDATE CATALOG
+// UPDATE CATALOG
 export const updateCatalog = async (
   req: AuthRequest,
   res: Response
 ) => {
   try {
-    const { title, description, published } = req.body;
+    const { title, description, category, subCategory } = req.body;
 
-    const catalog = await Catalog.findByIdAndUpdate(
-      req.params.id,
-      {
-        title,
-        description,
-        published,
-      },
-      {
-        returnDocument: "after",
-        runValidators: true,
-      }
+    const published =
+      req.body.published === "true" ||
+      req.body.published === true;
+
+    const catalog = await Catalog.findById(
+      req.params.id
     );
 
     if (!catalog) {
@@ -149,14 +145,99 @@ export const updateCatalog = async (
       });
     }
 
-    res.status(200).json({
+    // Update text fields only if provided
+    if (title !== undefined) {
+      catalog.title = title;
+    }
+
+    if (description !== undefined) {
+      catalog.description = description;
+    }
+
+    if (category !== undefined) {
+      catalog.category = category;
+    }
+
+    if (subCategory !== undefined) {
+      catalog.subCategory = subCategory;
+    }
+
+    if (req.body.published !== undefined) {
+      catalog.published = published;
+    }
+
+    // Update cover image if new image is uploaded
+    if (req.file) {
+      // Delete old cover image if it exists
+      if (catalog.coverImage) {
+        try {
+          const oldPublicId = catalog.coverImage
+            .split("/")
+            .slice(-2)
+            .join("/")
+            .split(".")[0];
+
+          await cloudinary.uploader.destroy(
+            oldPublicId
+          );
+        } catch (error) {
+          console.log(
+            "Old cover image delete failed:",
+            error
+          );
+        }
+      }
+
+      const updatedCatalog =
+        await new Promise<any>((resolve, reject) => {
+          const uploadStream =
+            cloudinary.uploader.upload_stream(
+              {
+                folder: "catalog-covers",
+                resource_type: "image",
+              },
+              (error, result) => {
+                if (error || !result) {
+                  reject(
+                    error ||
+                      new Error(
+                        "Cloudinary upload failed"
+                      )
+                  );
+                  return;
+                }
+
+                resolve(result);
+              }
+            );
+
+          Readable.from(
+            req.file!.buffer
+          ).pipe(uploadStream);
+        });
+
+      catalog.coverImage =
+        updatedCatalog.secure_url;
+    }
+
+    await catalog.save();
+
+    return res.status(200).json({
       message: "Catalog updated successfully",
       catalog,
     });
   } catch (error) {
-    res.status(500).json({
+    console.error(
+      "UPDATE CATALOG ERROR:",
+      error
+    );
+
+    return res.status(500).json({
       message: "Failed to update catalog",
-      error,
+      error:
+        error instanceof Error
+          ? error.message
+          : error,
     });
   }
 };

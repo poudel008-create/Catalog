@@ -9,6 +9,7 @@ import { AuthRequest } from "../middleware/authMiddleware";
 
 // upload multiple pages in catalog
 
+// UPLOAD MULTIPLE CATALOG PAGES
 export const uploadCatalogPage = async (
   req: AuthRequest,
   res: Response
@@ -18,12 +19,14 @@ export const uploadCatalogPage = async (
 
     const files = req.files as Express.Multer.File[];
 
+    // Check files
     if (!files || files.length === 0) {
       return res.status(400).json({
         message: "At least one page image is required",
       });
     }
 
+    // Check catalog
     const catalog = await Catalog.findById(catalogId);
 
     if (!catalog) {
@@ -32,55 +35,57 @@ export const uploadCatalogPage = async (
       });
     }
 
+    // Find last uploaded page
+    const lastPage = await CatalogPage.findOne({
+      catalogId,
+    }).sort({ pageNumber: -1 });
+
+    // If no pages -> start from 1
+    // If pages already exist -> continue from last page
+    const startingPageNumber = lastPage
+      ? lastPage.pageNumber + 1
+      : 1;
+
     const pages = [];
 
+    // Upload every file
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
 
+      // Automatically generate page number
+      const pageNumber = startingPageNumber + i;
 
+      const page = await new Promise<any>((resolve, reject) => {
+        const uploadStream =
+          cloudinary.uploader.upload_stream(
+            {
+              folder: "catalog-pages",
+              resource_type: "image",
+            },
+            async (error, result) => {
+              if (error || !result) {
+                reject(
+                  error ||
+                    new Error("Cloudinary upload failed")
+                );
+                return;
+              }
 
-      const pageNumber = Number(req.body.pageNumbers?.[i]);
+              try {
+                const createdPage =
+                  await CatalogPage.create({
+                    catalogId,
+                    pageNumber,
+                    imageUrl: result.secure_url,
+                    publicId: result.public_id,
+                  });
 
-      if (Number.isNaN(pageNumber)) {
-        return res.status(400).json({
-          message: `Invalid page number for page ${i + 1}`,
-        });
-      }
-
-
-
-
-      const category = req.body.categories?.[i];
-      const subcategory = req.body.subcategories?.[i];
-
-      const page = await new Promise((resolve, reject) => {
-        const uploadStream = cloudinary.uploader.upload_stream(
-          {
-            folder: "catalog-pages",
-            resource_type: "image",
-          },
-          async (error, result) => {
-            if (error || !result) {
-              reject(error || new Error("Cloudinary upload failed"));
-              return;
+                resolve(createdPage);
+              } catch (error) {
+                reject(error);
+              }
             }
-
-            try {
-              const createdPage = await CatalogPage.create({
-                catalogId,
-                pageNumber,
-                category,
-                subcategory,
-                imageUrl: result.secure_url,
-                publicId: result.public_id,
-              });
-
-              resolve(createdPage);
-            } catch (error) {
-              reject(error);
-            }
-          }
-        );
+          );
 
         Readable.from(file.buffer).pipe(uploadStream);
       });
@@ -93,11 +98,17 @@ export const uploadCatalogPage = async (
       pages,
     });
   } catch (error) {
-    console.error("Multiple page upload error:", error);
+    console.error(
+      "MULTIPLE PAGE UPLOAD ERROR:",
+      error
+    );
 
     return res.status(500).json({
       message: "Failed to upload catalog pages",
-      error,
+      error:
+        error instanceof Error
+          ? error.message
+          : error,
     });
   }
 };
@@ -253,51 +264,54 @@ export const updateCatalogPage = async (
 };
 // DELETE PAGE
 
+// DELETE PAGE
 export const deleteCatalogPage = async (
   req: AuthRequest,
   res: Response
 ) => {
   try {
-    const pageIds = Array.isArray(req.body.pageIds)
-      ? req.body.pageIds
-      : [req.body.pageIds];
+    const { pageId } = req.params;
 
-    if (!pageIds || pageIds.length === 0) {
+    if (!pageId) {
       return res.status(400).json({
         message: "Page ID is required",
       });
     }
 
-    const deletedPages = [];
+    const page = await CatalogPage.findById(pageId);
 
-    for (const pageId of pageIds) {
-      const page = await CatalogPage.findById(pageId);
-
-      if (!page) {
-        continue;
-      }
-
-      // Delete image from Cloudinary
-      if (page.publicId) {
-        await cloudinary.uploader.destroy(page.publicId);
-      }
-
-      // Delete from MongoDB
-      await CatalogPage.findByIdAndDelete(pageId);
-
-      deletedPages.push(pageId);
+    if (!page) {
+      return res.status(404).json({
+        message: "Catalog page not found",
+      });
     }
 
+    // Delete image from Cloudinary
+    if (page.publicId) {
+      await cloudinary.uploader.destroy(
+        page.publicId
+      );
+    }
+
+    // Delete page from MongoDB
+    await CatalogPage.findByIdAndDelete(pageId);
+
     return res.status(200).json({
-      message: "Catalog pages deleted successfully",
-      deletedPages,
+      message: "Catalog page deleted successfully",
+      deletedPage: pageId,
     });
   } catch (error) {
-    console.error("Delete catalog pages error:", error);
+    console.error(
+      "DELETE CATALOG PAGE ERROR:",
+      error
+    );
 
     return res.status(500).json({
-      message: "Failed to delete catalog pages",
-      error,
+      message: "Failed to delete catalog page",
+      error:
+        error instanceof Error
+          ? error.message
+          : error,
     });
   }
 };

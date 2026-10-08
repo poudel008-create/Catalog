@@ -23,7 +23,7 @@ router.post(
   "/:catalogId",
   authMiddleware,
   authorizeRoles("admin"),
-  upload.array("page", 20),
+  upload.array("pages", 20),
   uploadCatalogPage
 );
 
@@ -38,7 +38,7 @@ router.put(
 
 // Delete one or multiple pages
 router.delete(
-  "/pages",
+  "/page/:pageId",
   authMiddleware,
   authorizeRoles("admin"),
   deleteCatalogPage

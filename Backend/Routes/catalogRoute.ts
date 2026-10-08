@@ -5,7 +5,8 @@ import {
   getCatalogs,
   getCatalog,
   updateCatalog,
-  deleteCatalog, getPublishedCatalogs,
+  deleteCatalog,
+   getPublishedCatalogs,
 } from "../Controllers/catalogController";
 import upload from "../middleware/upload";
 
@@ -27,10 +28,13 @@ router.post(
   createCatalog
 );
 
+
+
 router.put(
   "/:id",
   authMiddleware,
   authorizeRoles("admin"),
+  upload.single("coverImage"),
   updateCatalog
 );
 
