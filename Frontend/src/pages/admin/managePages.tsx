@@ -6,6 +6,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AdminLayout from "./layout";
+import { useAuth } from "../../hooks/context/authContext";
 import {
   fetchCatalogPages,
   uploadCatalogPage,
@@ -16,6 +17,7 @@ import {
 const ManagePages = () => {
   const { catalogId } = useParams<{ catalogId: string }>();
   const navigate = useNavigate();
+  const {accessToken}= useAuth()
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [pages, setPages] = useState<CatalogPage[]>([]);
@@ -23,17 +25,26 @@ const ManagePages = () => {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
 
-  const load = async () => {
-    if (!catalogId) return;
-    try {
-      const data = await fetchCatalogPages(catalogId);
-      setPages(data);
-    } catch {
-      setError("Failed to load pages");
-    } finally {
-      setLoading(false);
-    }
-  };
+  
+const load = async () => {
+  if (!catalogId) return;
+
+  console.log("LOADING PAGES:", catalogId);
+
+  try {
+    const data = await fetchCatalogPages(catalogId);
+
+    console.log("PAGES RESPONSE:", data);
+
+    setPages(data);
+    setError("");
+  } catch (error: any) {
+    console.error("PAGE LOAD ERROR:", error);
+    setError(error.message || "Failed to load pages");
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => { load(); }, [catalogId]);
 
@@ -46,7 +57,7 @@ const ManagePages = () => {
         const fd = new FormData();
         fd.append("page", files[i]);
         fd.append("pageNumber", String(pages.length + i + 1));
-        const page = await uploadCatalogPage(catalogId, fd);
+        const page = await uploadCatalogPage(catalogId, fd, accessToken);
         setPages((prev) => [...prev, page]);
       }
     } catch (e: any) {
@@ -60,7 +71,7 @@ const ManagePages = () => {
   const handleDelete = async (pageId: string) => {
     if (!confirm("Delete this page?")) return;
     try {
-      await deleteCatalogPage(pageId);
+      await deleteCatalogPage(pageId, accessToken);
       setPages((prev) => prev.filter((p) => p._id !== pageId));
     } catch (e: any) {
       alert(e.message);

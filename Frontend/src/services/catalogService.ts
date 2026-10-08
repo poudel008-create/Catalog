@@ -1,11 +1,12 @@
 const BASE = "http://localhost:5000/api";
 
-const authHeaders = () => ({
+const authHeaders = (accessToken: string) => ({
   "Content-Type": "application/json",
-  Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+  Authorization: `Bearer ${accessToken}`,
 });
 
-// ── Catalogs ──────────────────────────────────────────────
+// ==================== Catalogs ====================
+
 export interface Catalog {
   _id: string;
   title: string;
@@ -15,13 +16,21 @@ export interface Catalog {
   createdAt: string;
 }
 
-export const fetchCatalogs = async (): Promise<Catalog[]> => {
+export const fetchCatalogs = async (
+  accessToken: string
+): Promise<Catalog[]> => {
+  console.log("CATALOG SERVICE TOKEN:", accessToken);
+  console.log("TOKEN EXISTS:", !!accessToken);
+
   const res = await fetch(`${BASE}/catalogs`, {
     method: "GET",
-    headers: authHeaders(),
+    headers: authHeaders(accessToken),
   });
 
   const data = await res.json();
+
+  console.log("CATALOG STATUS:", res.status);
+  console.log("CATALOG RESPONSE:", data);
 
   if (!res.ok) {
     throw new Error(data.message || "Failed to fetch catalogs");
@@ -29,43 +38,72 @@ export const fetchCatalogs = async (): Promise<Catalog[]> => {
 
   return data.catalogs ?? [];
 };
-export const createCatalog = async (formData: FormData): Promise<Catalog> => {
+
+export const createCatalog = async (
+  formData: FormData,
+  accessToken: string
+): Promise<Catalog> => {
+  console.log("CREATE CATALOG TOKEN:", accessToken);
+  console.log("TOKEN EXISTS:", !!accessToken);
+
   const res = await fetch(`${BASE}/catalogs`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
     body: formData,
   });
+
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message || "Failed to create catalog");
+
+  console.log("CREATE CATALOG STATUS:", res.status);
+  console.log("CREATE CATALOG RESPONSE:", data);
+
+  if (!res.ok) {
+    throw new Error(
+      data.message || "Failed to create catalog"
+    );
+  }
+
   return data.catalog;
 };
-
 export const updateCatalog = async (
   id: string,
-  body: Partial<Pick<Catalog, "title" | "description" | "published">>
+  body: Partial<Pick<Catalog, "title" | "description" | "published">>,
+  accessToken: string
 ): Promise<Catalog> => {
   const res = await fetch(`${BASE}/catalogs/${id}`, {
     method: "PUT",
-    headers: authHeaders(),
+    headers: authHeaders(accessToken),
     body: JSON.stringify(body),
   });
+
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message || "Failed to update catalog");
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to update catalog");
+  }
+
   return data.catalog;
 };
 
-export const deleteCatalog = async (id: string): Promise<void> => {
+export const deleteCatalog = async (
+  id: string,
+  accessToken: string
+): Promise<void> => {
   const res = await fetch(`${BASE}/catalogs/${id}`, {
     method: "DELETE",
-    headers: authHeaders(),
+    headers: authHeaders(accessToken),
   });
+
   if (!res.ok) {
     const data = await res.json();
     throw new Error(data.message || "Failed to delete catalog");
   }
 };
 
-// ── Catalog Pages ─────────────────────────────────────────
+// ==================== Catalog Pages ====================
+
 export interface CatalogPage {
   _id: string;
   catalogId: string;
@@ -77,15 +115,15 @@ export interface CatalogPage {
 export const fetchCatalogPages = async (
   catalogId: string
 ): Promise<CatalogPage[]> => {
-  const res = await fetch(
-    `${BASE}/catalog-pages/${catalogId}`,
-    {
-      method: "GET",
-      headers: authHeaders(),
-    }
-  );
+  console.log("FETCHING:", `${BASE}/catalog-pages/${catalogId}`);
+
+  const res = await fetch(`${BASE}/catalog-pages/${catalogId}`);
+
+  console.log("STATUS:", res.status);
 
   const data = await res.json();
+
+  console.log("DATA:", data);
 
   if (!res.ok) {
     throw new Error(
@@ -98,25 +136,55 @@ export const fetchCatalogPages = async (
 
 export const uploadCatalogPage = async (
   catalogId: string,
-  formData: FormData
+  formData: FormData,
+  accessToken: string
 ): Promise<CatalogPage> => {
-  const res = await fetch(`${BASE}/catalog-pages/${catalogId}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
-    body: formData,
-  });
+  console.log("TOKEN EXISTS:", !!accessToken);
+  console.log("TOKEN LENGTH:", accessToken?.length);
+
+  const res = await fetch(
+    `${BASE}/catalog-pages/${catalogId}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: formData,
+    }
+  );
+
+  console.log("UPLOAD STATUS:", res.status);
+
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message || "Failed to upload page");
+
+  console.log("UPLOAD RESPONSE:", data);
+
+  if (!res.ok) {
+    throw new Error(
+      data.message || "Failed to upload page"
+    );
+  }
+
   return data.page;
 };
 
-export const deleteCatalogPage = async (pageId: string): Promise<void> => {
-  const res = await fetch(`${BASE}/catalog-pages/page/${pageId}`, {
-    method: "DELETE",
-    headers: authHeaders(),
-  });
+export const deleteCatalogPage = async (
+  pageId: string,
+  accessToken: string
+): Promise<void> => {
+  const res = await fetch(
+    `${BASE}/catalog-pages/page/${pageId}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(accessToken),
+    }
+  );
+
   if (!res.ok) {
     const data = await res.json();
-    throw new Error(data.message || "Failed to delete page");
+
+    throw new Error(
+      data.message || "Failed to delete page"
+    );
   }
 };

@@ -79,9 +79,7 @@ export const getCatalogs = async (
   res: Response
 ) => {
   try {
-    const catalogs = await Catalog.find({
-      published:true,
-    }).sort({ createdAt: -1 });
+    const catalogs = await Catalog.find().sort({ createdAt: -1 }); /////////////////
 
     res.status(200).json({
       catalogs,

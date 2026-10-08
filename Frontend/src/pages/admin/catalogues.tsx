@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { BookOpen, Plus, Trash2, Eye, EyeOff, ArrowLeft, Pencil, ImageOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useAuth } from "../../hooks/context/authContext";
 import AdminLayout from "./layout";
 import {
   fetchCatalogs,
@@ -13,35 +14,77 @@ import {
 
 const AdminCatalogues = () => {
   const navigate = useNavigate();
+  const { accessToken } = useAuth();
   const [catalogs, setCatalogs] = useState<Catalog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    fetchCatalogs()
-      .then(setCatalogs)
-      .catch(() => setError("Failed to load catalogues"))
-      .finally(() => setLoading(false));
-  }, []);
+useEffect(() => {
+  console.log("CATALOG TOKEN:", accessToken);
+  console.log("TOKEN EXISTS:", !!accessToken);
+
+  if (!accessToken) {
+    setLoading(false);
+    setError("Access token is missing");
+    return;
+  }
+
+  fetchCatalogs(accessToken)
+    .then((data) => {
+      console.log("CATALOG DATA:", data);
+      setCatalogs(data);
+    })
+    .catch((error) => {
+      console.error("CATALOG LOAD ERROR:", error);
+      setError(error.message || "Failed to load catalogues");
+    })
+    .finally(() => {
+      setLoading(false);
+    });
+}, [accessToken]);
+
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this catalogue and all its pages?")) return;
-    try {
-      await deleteCatalog(id);
-      setCatalogs((prev) => prev.filter((c) => c._id !== id));
-    } catch (e: any) {
-      alert(e.message);
-    }
-  };
+  if (!confirm("Delete this catalogue and all its pages?")) return;
+
+  if (!accessToken) {
+    alert("Access token is missing");
+    return;
+  }
+
+  try {
+    await deleteCatalog(id, accessToken);
+
+    setCatalogs((prev) =>
+      prev.filter((c) => c._id !== id)
+    );
+  } catch (e: any) {
+    alert(e.message);
+  }
+};
 
   const handleTogglePublish = async (cat: Catalog) => {
-    try {
-      const updated = await updateCatalog(cat._id, { published: !cat.published });
-      setCatalogs((prev) => prev.map((c) => (c._id === cat._id ? updated : c)));
-    } catch (e: any) {
-      alert(e.message);
-    }
-  };
+  if (!accessToken) {
+    alert("You are not authenticated");
+    return;
+  }
+
+  try {
+    const updated = await updateCatalog(
+      cat._id,
+      { published: !cat.published },
+      accessToken
+    );
+
+    setCatalogs((prev) =>
+      prev.map((c) =>
+        c._id === cat._id ? updated : c
+      )
+    );
+  } catch (e: any) {
+    alert(e.message);
+  }
+};
 
   return (
     <AdminLayout>

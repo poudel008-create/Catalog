@@ -3,11 +3,16 @@ import { AuthUser } from "../../services/authServices";
 export interface AuthState {
   user: AuthUser | null;
   accessToken: string | null;
-  isAuthenticated: boolean;
   loading: boolean;
 }
 
-export type AuthAction =
+export const initialAuthState: AuthState = {
+  user: null,
+  accessToken: null,
+  loading: true,
+};
+
+type AuthAction =
   | {
       type: "LOGIN";
       payload: {
@@ -16,19 +21,17 @@ export type AuthAction =
       };
     }
   | {
+      type: "REFRESH";
+      payload: {
+        accessToken: string;
+      };
+    }
+  | {
       type: "LOGOUT";
     }
   | {
-      type: "SET_LOADING";
-      payload: boolean;
+      type: "FINISH_LOADING";
     };
-
-export const initialAuthState: AuthState = {
-  user: null,
-  accessToken: null,
-  isAuthenticated: false,
-  loading: true,
-};
 
 export const authReducer = (
   state: AuthState,
@@ -37,23 +40,29 @@ export const authReducer = (
   switch (action.type) {
     case "LOGIN":
       return {
-        ...state,
         user: action.payload.user,
         accessToken: action.payload.accessToken,
-        isAuthenticated: true,
+        loading: false,
+      };
+
+    case "REFRESH":
+      return {
+        ...state,
+        accessToken: action.payload.accessToken,
         loading: false,
       };
 
     case "LOGOUT":
       return {
-        ...initialAuthState,
+        user: null,
+        accessToken: null,
         loading: false,
       };
 
-    case "SET_LOADING":
+    case "FINISH_LOADING":
       return {
         ...state,
-        loading: action.payload,
+        loading: false,
       };
 
     default:
