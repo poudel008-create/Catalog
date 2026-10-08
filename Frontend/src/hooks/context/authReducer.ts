@@ -3,16 +3,11 @@ import { AuthUser } from "../../services/authServices";
 export interface AuthState {
   user: AuthUser | null;
   accessToken: string | null;
+  isAuthenticated: boolean;
   loading: boolean;
 }
 
-export const initialAuthState: AuthState = {
-  user: null,
-  accessToken: null,
-  loading: true,
-};
-
-type AuthAction =
+export type AuthAction =
   | {
       type: "LOGIN";
       payload: {
@@ -21,17 +16,19 @@ type AuthAction =
       };
     }
   | {
-      type: "REFRESH";
-      payload: {
-        accessToken: string;
-      };
-    }
-  | {
       type: "LOGOUT";
     }
   | {
-      type: "FINISH_LOADING";
+      type: "SET_LOADING";
+      payload: boolean;
     };
+
+export const initialAuthState: AuthState = {
+  user: null,
+  accessToken: null,
+  isAuthenticated: false,
+  loading: true,
+};
 
 export const authReducer = (
   state: AuthState,
@@ -39,31 +36,25 @@ export const authReducer = (
 ): AuthState => {
   switch (action.type) {
     case "LOGIN":
-      return {
-        user: action.payload.user,
-        accessToken: action.payload.accessToken,
-        loading: false,
-      };
-
-    case "REFRESH":
-      return {
-        ...state,
-        accessToken: action.payload.accessToken,
-        loading: false,
-      };
+  return {
+    ...state,
+    user: action.payload.user,
+    accessToken: action.payload.accessToken,
+    isAuthenticated: true,
+    loading: false,
+  };
 
     case "LOGOUT":
       return {
-        user: null,
-        accessToken: null,
+        ...initialAuthState,
         loading: false,
       };
 
-    case "FINISH_LOADING":
-      return {
-        ...state,
-        loading: false,
-      };
+    case "SET_LOADING":
+  return {
+    ...state,
+    loading: action.payload,
+  };
 
     default:
       return state;

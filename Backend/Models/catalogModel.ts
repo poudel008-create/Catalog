@@ -4,6 +4,8 @@ export interface ICatalog extends Document {
   title: string;
   description?: string;
   coverImage?: string;
+  category?: string;
+  subCategory?: string;
   published: boolean;
   createdBy: mongoose.Types.ObjectId;
 }
@@ -29,6 +31,17 @@ const catalogSchema = new Schema<ICatalog>(
       type: Boolean,
       default: false,
     },
+    category: {
+  type: Schema.Types.ObjectId,
+  ref: "Category",
+  required: true,
+},
+
+subCategory: {
+  type: Schema.Types.ObjectId,
+  ref: "SubCategory",
+  required: true,
+},
 
     createdBy: {
       type: Schema.Types.ObjectId,

@@ -2,11 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, BookOpen, BookMarked } from "lucide-react";
 import CatalogueViewer from "../components/catalogueViewer";
 import CatalogueToolbar from "./catalogToolbar";
-import {
-  fetchCatalogs,
-  fetchCatalogPages,
+import {fetchCatalogPages, fetchPublishedCatalogs,
   type Catalog,
-  type CatalogPage,
+  type CatalogPage, 
 } from "../services/catalogService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -235,7 +233,7 @@ const Pages = () => {
 
   // Fetch published catalogue list once
   useEffect(() => {
-    fetchCatalogs("")
+    fetchPublishedCatalogs()
       .then(setCatalogs)
       .catch(() => setCatalogs([]))
       .finally(() => setLoadingCatalogs(false));

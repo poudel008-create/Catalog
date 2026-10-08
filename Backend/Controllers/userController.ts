@@ -3,19 +3,18 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../Models/userModel";
 
-// REGISTER
+// ==================== REGISTER ====================
+
 export const registerUser = async (req: Request, res: Response) => {
   try {
     const { name, email, password, role } = req.body;
 
-    // Check required fields
     if (!name || !email || !password) {
       return res.status(400).json({
         message: "Name, email and password are required",
       });
     }
 
-    // Check existing user
     const existingUser = await User.findOne({ email });
 
     if (existingUser) {
@@ -24,10 +23,8 @@ export const registerUser = async (req: Request, res: Response) => {
       });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
     const user = await User.create({
       name,
       email,
@@ -52,87 +49,17 @@ export const registerUser = async (req: Request, res: Response) => {
   }
 };
 
-// LOGIN
-// export const loginUser = async (req: Request, res: Response) => {
-//   try {
-//     const { email, password } = req.body;
+// ==================== LOGIN ====================
 
-//     // Check fields
-//     if (!email || !password) {
-//       return res.status(400).json({
-//         message: "Email and password are required",
-//       });
-//     }
-
-//     // Find user
-//     const user = await User.findOne({ email });
-
-//     if (!user) {
-//       return res.status(401).json({
-//         message: "Invalid email or password",
-//       });
-//     }
-
-//     // Compare password
-//     const isMatch = await bcrypt.compare(password, user.password);
-
-//     if (!isMatch) {
-//       return res.status(401).json({
-//         message: "Invalid email or password",
-//       });
-//     }
-
-//     // Create token
-//     const token = jwt.sign(
-//       {
-//         id: user._id,
-//         role: user.role,
-//       },
-//       process.env.ACCESS_TOKEN_SECRET as string,
-//       {
-//         expiresIn: "1d",
-//       }
-//     );
-
-//       const refreshToken = jwt.sign(
-//       {
-//         id: user._id,
-//         role: user.role,
-//       },
-//       process.env.REFRESH_TOKENSECRET as string,
-//       {
-//         expiresIn: "7d",
-//       }
-//     );
-
-
-//     res.status(200).json({
-//       message: "Login successful",
-//       token,
-//       user: {
-//         id: user._id,
-//         name: user.name,
-//         email: user.email,
-//         role: user.role,
-//       },
-//     });
-//   } catch (error) {
-//     res.status(500).json({
-//       message: "Login failed",
-//       error,
-//     });
-//   }
-// };
-
-
-
-// LOGIN
-export const loginUser = async (
-  req: Request,
-  res: Response
-) => {
+export const loginUser = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        message: "Email and password are required",
+      });
+    }
 
     const user = await User.findOne({ email });
 
@@ -142,10 +69,7 @@ export const loginUser = async (
       });
     }
 
-    const isMatch = await bcrypt.compare(
-      password,
-      user.password
-    );
+    const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
       return res.status(401).json({
@@ -153,7 +77,7 @@ export const loginUser = async (
       });
     }
 
-    // ACCESS TOKEN
+    // Access token
     const accessToken = jwt.sign(
       {
         id: user._id,
@@ -165,7 +89,7 @@ export const loginUser = async (
       }
     );
 
-    // REFRESH TOKEN
+    // Refresh token
     const refreshToken = jwt.sign(
       {
         id: user._id,
@@ -180,16 +104,14 @@ export const loginUser = async (
     // Store refresh token in HTTP-only cookie
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: false,
+      secure: false, // true in production with HTTPS
       sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     res.status(200).json({
       message: "Login successful",
-
-      accessToken,
-
+      token: accessToken,
       user: {
         id: user._id,
         name: user.name,
@@ -209,16 +131,18 @@ export const loginUser = async (
   }
 };
 
+// ==================== REFRESH TOKEN ====================
+
 export const refreshToken = async (
   req: Request,
   res: Response
 ) => {
   try {
-    const token = req.cookies.refreshToken;
+    const token = req.cookies?.refreshToken;
 
     if (!token) {
       return res.status(401).json({
-        message: "Refresh token required",
+        message: "Refresh token is required",
       });
     }
 
@@ -230,9 +154,7 @@ export const refreshToken = async (
       role: "admin" | "user";
     };
 
-    const user = await User.findById(decoded.id).select(
-      "-password"
-    );
+    const user = await User.findById(decoded.id);
 
     if (!user) {
       return res.status(401).json({
@@ -240,7 +162,8 @@ export const refreshToken = async (
       });
     }
 
-    const newAccessToken = jwt.sign(
+    // Create new access token
+    const accessToken = jwt.sign(
       {
         id: user._id,
         role: user.role,
@@ -252,8 +175,8 @@ export const refreshToken = async (
     );
 
     res.status(200).json({
-      accessToken: newAccessToken,
-
+      message: "Access token refreshed",
+      token: accessToken,
       user: {
         id: user._id,
         name: user.name,
@@ -262,20 +185,23 @@ export const refreshToken = async (
       },
     });
   } catch (error) {
-    console.error("REFRESH TOKEN ERROR:", error);
-
     return res.status(401).json({
       message: "Invalid or expired refresh token",
     });
   }
 };
 
+// ==================== LOGOUT ====================
 
-export const logoutUser = (
+export const logoutUser = async (
   req: Request,
   res: Response
 ) => {
-  res.clearCookie("refreshToken");
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: false,
+    sameSite: "lax",
+  });
 
   res.status(200).json({
     message: "Logout successful",

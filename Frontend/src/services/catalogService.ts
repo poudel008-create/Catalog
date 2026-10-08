@@ -188,3 +188,18 @@ export const deleteCatalogPage = async (
     );
   }
 };
+
+// Public
+export const fetchPublishedCatalogs = async (): Promise<Catalog[]> => {
+  const res = await fetch(`${BASE}/catalogs/public`);
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(
+      data.message || "Failed to fetch published catalogs"
+    );
+  }
+
+  return data.catalogs ?? [];
+};
