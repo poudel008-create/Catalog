@@ -5,6 +5,8 @@ import {
   ImagePlus,
   Trash2,
   Loader2,
+  Pencil,
+  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -21,6 +23,8 @@ import {
   fetchCatalogPages,
   uploadCatalogPage,
   deleteCatalogPage,
+  updateCatalogPage,
+  deleteMultipleCatalogPages,
   type CatalogPage,
 } from "../../services/catalogService";
 
@@ -50,6 +54,28 @@ const ManagePages = () => {
 
   const [error, setError] =
     useState("");
+
+  // Select mode state
+  const [selectMode, setSelectMode] =
+    useState(false);
+  const [selected, setSelected] =
+    useState<string[]>([]);
+  const [deleting, setDeleting] =
+    useState(false);
+
+  // Edit modal state
+  const [editingPage, setEditingPage] =
+    useState<CatalogPage | null>(null);
+  const [editPageNumber, setEditPageNumber] =
+    useState<number | string>("");
+  const [editFile, setEditFile] =
+    useState<File | null>(null);
+  const [editPreviewUrl, setEditPreviewUrl] =
+    useState<string | null>(null);
+  const [savingEdit, setSavingEdit] =
+    useState(false);
+  const editFileInputRef =
+    useRef<HTMLInputElement>(null);
 
   // =========================
   // LOAD PAGES
@@ -214,6 +240,141 @@ const handleUpload = async (
     }
   };
 
+  useEffect(() => {
+    return () => {
+      if (editPreviewUrl) {
+        URL.revokeObjectURL(editPreviewUrl);
+      }
+    };
+  }, [editPreviewUrl]);
+
+  const handleOpenEdit = (page: CatalogPage) => {
+    if (editPreviewUrl) {
+      URL.revokeObjectURL(editPreviewUrl);
+    }
+    setEditingPage(page);
+    setEditPageNumber(page.pageNumber);
+    setEditFile(null);
+    setEditPreviewUrl(null);
+  };
+
+  const handleCloseEdit = () => {
+    if (editPreviewUrl) {
+      URL.revokeObjectURL(editPreviewUrl);
+    }
+    setEditingPage(null);
+    setEditFile(null);
+    setEditPreviewUrl(null);
+    setEditPageNumber("");
+  };
+
+  const handleEditFileChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (editPreviewUrl) {
+        URL.revokeObjectURL(editPreviewUrl);
+      }
+      const preview = URL.createObjectURL(file);
+      setEditFile(file);
+      setEditPreviewUrl(preview);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingPage || !catalogId) return;
+
+    const parsedNumber = Number(editPageNumber);
+    if (!parsedNumber || !Number.isInteger(parsedNumber) || parsedNumber <= 0) {
+      setError("Page number must be a positive integer");
+      return;
+    }
+
+    if (!accessToken) {
+      setError("Access token is missing");
+      return;
+    }
+
+    setSavingEdit(true);
+    setError("");
+
+    try {
+      await updateCatalogPage(
+        catalogId,
+        {
+          pageId: editingPage._id,
+          pageNumber: parsedNumber,
+          file: editFile,
+        },
+        accessToken
+      );
+
+      handleCloseEdit();
+      await loadPages();
+    } catch (error: any) {
+      console.error("UPDATE PAGE ERROR:", error);
+      setError(
+        error.message || "Failed to update page"
+      );
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selected.length === pages.length) {
+      setSelected([]);
+    } else {
+      setSelected(pages.map((p) => p._id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!selected.length || !catalogId) return;
+
+    const confirmed = window.confirm(
+      `Delete ${selected.length} selected page${
+        selected.length > 1 ? "s" : ""
+      }?`
+    );
+
+    if (!confirmed) return;
+
+    if (!accessToken) {
+      setError("Access token is missing");
+      return;
+    }
+
+    setDeleting(true);
+
+    try {
+      setError("");
+
+      await deleteMultipleCatalogPages(
+        catalogId,
+        selected,
+        accessToken
+      );
+
+      setSelected([]);
+      setSelectMode(false);
+      await loadPages();
+    } catch (error: any) {
+      console.error(
+        "BULK DELETE ERROR:",
+        error
+      );
+
+      setError(
+        error.message ||
+          "Failed to delete pages"
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const sortedPages = [
     ...pages,
   ].sort(
@@ -263,7 +424,52 @@ const handleUpload = async (
 
           {/* UPLOAD BUTTON */}
 
-          <div>
+          <div className="flex items-center gap-2">
+
+            {pages.length > 0 && (
+              <>
+                {selectMode && (
+                  <>
+                    <Button
+                      variant="outline"
+                      type="button"
+                      onClick={handleToggleSelectAll}
+                    >
+                      {selected.length === pages.length
+                        ? "Unselect all"
+                        : "Select all"}
+                    </Button>
+
+                    <Button
+                      variant="destructive"
+                      type="button"
+                      disabled={selected.length === 0 || deleting}
+                      onClick={handleBulkDelete}
+                    >
+                      {deleting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                          Deleting...
+                        </>
+                      ) : (
+                        `Delete (${selected.length})`
+                      )}
+                    </Button>
+                  </>
+                )}
+
+                <Button
+                  variant={selectMode ? "secondary" : "outline"}
+                  type="button"
+                  onClick={() => {
+                    setSelectMode((prev) => !prev);
+                    setSelected([]);
+                  }}
+                >
+                  {selectMode ? "Cancel" : "Select"}
+                </Button>
+              </>
+            )}
 
             <input
               ref={fileRef}
@@ -367,8 +573,33 @@ const handleUpload = async (
 
                 <div
                   key={page._id}
-                  className="group relative overflow-hidden rounded-xl border bg-card"
+                  onClick={() => {
+                    if (selectMode) {
+                      setSelected((prev) =>
+                        prev.includes(page._id)
+                          ? prev.filter((id) => id !== page._id)
+                          : [...prev, page._id]
+                      );
+                    }
+                  }}
+                  className={`group relative overflow-hidden rounded-xl border bg-card ${
+                    selectMode ? "cursor-pointer" : ""
+                  } ${
+                    selected.includes(page._id) ? "ring-2 ring-primary" : ""
+                  }`}
                 >
+
+                  {/* SELECT CHECKBOX */}
+                  {selectMode && (
+                    <div className="absolute top-2 left-2 z-10">
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(page._id)}
+                        readOnly
+                        className="h-4 w-4 rounded pointer-events-none accent-primary"
+                      />
+                    </div>
+                  )}
 
                   {/* PAGE IMAGE */}
 
@@ -380,40 +611,61 @@ const handleUpload = async (
 
                   {/* HOVER CONTROLS */}
 
-                  <div className="absolute inset-0 flex flex-col justify-between bg-black/0 p-2 transition group-hover:bg-black/30">
+                  {!selectMode && (
+                    <div className="absolute inset-0 flex flex-col justify-between bg-black/0 p-2 transition group-hover:bg-black/30">
 
-                    <div className="flex items-start justify-between opacity-0 transition group-hover:opacity-100">
+                      <div className="flex items-start justify-between opacity-0 transition group-hover:opacity-100">
 
-                      {/* PAGE NUMBER */}
+                        {/* PAGE NUMBER */}
 
-                      <span className="rounded-full bg-black/60 px-2 py-0.5 text-xs text-white">
-                        #{page.pageNumber}
-                      </span>
+                        <span className="rounded-full bg-black/60 px-2 py-0.5 text-xs text-white">
+                          #{page.pageNumber}
+                        </span>
 
-                      {/* DELETE */}
+                        <div className="flex items-center gap-1">
+                          {/* EDIT */}
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleDelete(
-                            page._id
-                          )
-                        }
-                        className="rounded-full bg-destructive/80 p-1 text-white hover:bg-destructive"
-                        title="Delete page"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEdit(page);
+                            }}
+                            className="rounded-full bg-black/60 p-1 text-white hover:bg-black/80"
+                            title="Edit page"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+
+                          {/* DELETE */}
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(
+                                page._id
+                              );
+                            }}
+                            className="rounded-full bg-destructive/80 p-1 text-white hover:bg-destructive"
+                            title="Delete page"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+
+                      </div>
 
                     </div>
-
-                  </div>
+                  )}
 
                   {/* PAGE NUMBER BOTTOM */}
 
                   <div className="border-t bg-card px-3 py-2 text-center text-sm font-medium">
-                    Page{" "}
-                    {page.pageNumber}
+                    <div>
+                      Page{" "}
+                      {page.pageNumber}
+                    </div>
                   </div>
 
                 </div>
@@ -425,35 +677,138 @@ const handleUpload = async (
                 ADD MORE
             ========================= */}
 
-            <button
-              type="button"
-              onClick={() =>
-                fileRef.current?.click()
-              }
-              disabled={uploading}
-              className="flex aspect-[3/4] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border text-muted-foreground transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
-            >
+            {!selectMode && (
+              <button
+                type="button"
+                onClick={() =>
+                  fileRef.current?.click()
+                }
+                disabled={uploading}
+                className="flex aspect-[3/4] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border text-muted-foreground transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+              >
 
-              {uploading ? (
-                <>
-                  <Loader2 className="h-8 w-8 animate-spin" />
+                {uploading ? (
+                  <>
+                    <Loader2 className="h-8 w-8 animate-spin" />
 
-                  <span className="text-xs">
-                    Uploading...
-                  </span>
-                </>
-              ) : (
-                <>
-                  <ImagePlus className="h-8 w-8" />
+                    <span className="text-xs">
+                      Uploading...
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <ImagePlus className="h-8 w-8" />
 
-                  <span className="text-xs">
-                    Add more pages
-                  </span>
-                </>
-              )}
+                    <span className="text-xs">
+                      Add more pages
+                    </span>
+                  </>
+                )}
 
-            </button>
+              </button>
+            )}
 
+          </div>
+        )}
+
+        {/* =========================
+            EDIT MODAL
+        ========================= */}
+        {editingPage && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <Card className="w-full max-w-md bg-card shadow-lg">
+              <CardContent className="space-y-4 p-6">
+                <div className="flex items-center justify-between border-b pb-3">
+                  <h2 className="text-lg font-semibold">
+                    Edit Page #{editingPage.pageNumber}
+                  </h2>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    type="button"
+                    onClick={handleCloseEdit}
+                    disabled={savingEdit}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {/* IMAGE PREVIEW */}
+                <div className="flex flex-col items-center gap-3">
+                  <div className="relative aspect-[3/4] w-36 overflow-hidden rounded-lg border bg-muted">
+                    <img
+                      src={editPreviewUrl || editingPage.imageUrl}
+                      alt={`Page ${editingPage.pageNumber}`}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+
+                  <input
+                    ref={editFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleEditFileChange}
+                  />
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => editFileInputRef.current?.click()}
+                    disabled={savingEdit}
+                  >
+                    Replace image
+                  </Button>
+                </div>
+
+                {/* PAGE NUMBER */}
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Page Number</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={editPageNumber}
+                    onChange={(e) =>
+                      setEditPageNumber(
+                        e.target.value === "" ? "" : Number(e.target.value)
+                      )
+                    }
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Page numbers swap if the number is already used.
+                  </p>
+                </div>
+
+                {/* MODAL ACTIONS */}
+                <div className="flex justify-end gap-2 border-t pt-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCloseEdit}
+                    disabled={savingEdit}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleSaveEdit}
+                    disabled={savingEdit}
+                    className="gap-2"
+                  >
+                    {savingEdit ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save"
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         )}
 
@@ -463,4 +818,3 @@ const handleUpload = async (
 };
 
 export default ManagePages;
-

@@ -93,6 +93,12 @@ export interface CatalogPage {
   publicId: string;
 }
 
+export interface UpdatePageInput {
+  pageId: string;
+  pageNumber?: number;
+  file?: File | null;
+}
+
 export const fetchCatalogPages = async (
   catalogId: string
 ): Promise<CatalogPage[]> => {
@@ -166,6 +172,61 @@ export const deleteCatalogPage = async (
 
     throw new Error(
       data.message || "Failed to delete page"
+    );
+  }
+};
+
+export const updateCatalogPage = async (
+  catalogId: string,
+  input: UpdatePageInput,
+  accessToken: string
+): Promise<CatalogPage> => {
+  const formData = new FormData();
+  formData.append("pageIds", input.pageId);
+
+  if (input.pageNumber !== undefined) {
+    formData.append("pageNumbers", String(input.pageNumber));
+  }
+
+  if (input.file) {
+    formData.append("pages", input.file);
+  }
+
+  const res = await fetch(`${BASE}/catalog-pages/${catalogId}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: formData,
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to update page");
+  }
+
+  return data.pages?.[0];
+};
+
+export const deleteMultipleCatalogPages = async (
+  catalogId: string,
+  pageIds: string[],
+  accessToken: string
+): Promise<void> => {
+  const res = await fetch(
+    `${BASE}/catalog-pages/bulk/${catalogId}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ pageIds }),
+    }
+  );
+
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(
+      data.message || "Failed to delete pages"
     );
   }
 };

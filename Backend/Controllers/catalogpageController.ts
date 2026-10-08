@@ -7,7 +7,42 @@ import cloudinary from "../config/cloudinary";
 import { AuthRequest } from "../middleware/authMiddleware";
 
 
-// upload multiple pages in catalog
+const uploadToCloudinary = (buffer: Buffer) =>
+  new Promise<any>((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { folder: "catalog-pages", resource_type: "image" },
+      (error, result) => {
+        if (error || !result) {
+          reject(error || new Error("Cloudinary upload failed"));
+          return;
+        }
+        resolve(result);
+      }
+    );
+    Readable.from(buffer).pipe(uploadStream);
+  });
+
+const toArray = (value: any): any[] =>
+  value === undefined ? [] : Array.isArray(value) ? value : [value];
+
+// delete pachi gap hatauna renumber
+const renumberPages = async (catalogId: string) => {
+  const pages = await CatalogPage.find({ catalogId }).sort({ pageNumber: 1 });
+
+  const ops = pages
+    .map((p, index) => ({ page: p, newNumber: index + 1 }))
+    .filter(({ page, newNumber }) => page.pageNumber !== newNumber)
+    .map(({ page, newNumber }) => ({
+      updateOne: {
+        filter: { _id: page._id },
+        update: { $set: { pageNumber: newNumber } },
+      },
+    }));
+
+  if (ops.length > 0) {
+    await CatalogPage.bulkWrite(ops);
+  }
+};
 
 // UPLOAD MULTIPLE CATALOG PAGES
 export const uploadCatalogPage = async (
@@ -66,7 +101,7 @@ export const uploadCatalogPage = async (
               if (error || !result) {
                 reject(
                   error ||
-                    new Error("Cloudinary upload failed")
+                  new Error("Cloudinary upload failed")
                 );
                 return;
               }
@@ -162,14 +197,6 @@ export const updateCatalogPage = async (
       ? req.body.pageNumbers
       : [req.body.pageNumbers];
 
-    const categories = Array.isArray(req.body.categories)
-      ? req.body.categories
-      : [req.body.categories];
-
-    const subcategories = Array.isArray(req.body.subcategories)
-      ? req.body.subcategories
-      : [req.body.subcategories];
-
     if (!pageIds || pageIds.length === 0) {
       return res.status(400).json({
         message: "Page ID is required",
@@ -186,6 +213,7 @@ export const updateCatalogPage = async (
 
     for (let i = 0; i < pageIds.length; i++) {
       const pageId = pageIds[i];
+      const allPages = await CatalogPage.find({ catalogId });
 
       const page = await CatalogPage.findOne({
         _id: pageId,
@@ -199,46 +227,42 @@ export const updateCatalogPage = async (
       }
 
       // Update basic information
-      if (pageNumbers[i] !== undefined) {
-        page.pageNumber = Number(pageNumbers[i]);
-      }
+      if (pageNumbers[i] !== undefined && pageNumbers[i] !== "") {
+        const newNumber = Number(pageNumbers[i]);
 
-      if (categories[i] !== undefined) {
-        page.category = categories[i];
-      }
+        if (!Number.isInteger(newNumber) || newNumber < 1) {
+          return res.status(400).json({
+            message: "Page number must be a positive whole number",
+          });
+        }
 
-      if (subcategories[i] !== undefined) {
-        page.subcategory = subcategories[i];
+        const oldNumber = page.pageNumber;
+
+        if (newNumber !== oldNumber) {
+          const other = allPages.find(
+            (p) =>
+              p.pageNumber === newNumber &&
+              p._id.toString() !== page._id.toString()
+          );
+
+          if (other) {
+            other.pageNumber = oldNumber; // swap
+            await other.save();
+          }
+
+          page.pageNumber = newNumber;
+        }
       }
 
       // If new image is provided
       if (files && files[i]) {
-        // Delete old image from Cloudinary
+        // pahile naya upload
+        const result = await uploadToCloudinary(files[i].buffer);
+
+        // tespachi purano delete
         if (page.publicId) {
           await cloudinary.uploader.destroy(page.publicId);
         }
-
-        // Upload new image
-        const result = await new Promise<any>((resolve, reject) => {
-          const uploadStream = cloudinary.uploader.upload_stream(
-            {
-              folder: "catalog-pages",
-              resource_type: "image",
-            },
-            (error, result) => {
-              if (error || !result) {
-                reject(
-                  error || new Error("Cloudinary upload failed")
-                );
-                return;
-              }
-
-              resolve(result);
-            }
-          );
-
-          Readable.from(files[i].buffer).pipe(uploadStream);
-        });
 
         page.imageUrl = result.secure_url;
         page.publicId = result.public_id;
@@ -286,6 +310,7 @@ export const deleteCatalogPage = async (
       });
     }
 
+    const catalogId = page.catalogId.toString();
     // Delete image from Cloudinary
     if (page.publicId) {
       await cloudinary.uploader.destroy(
@@ -295,6 +320,7 @@ export const deleteCatalogPage = async (
 
     // Delete page from MongoDB
     await CatalogPage.findByIdAndDelete(pageId);
+    await renumberPages(catalogId);
 
     return res.status(200).json({
       message: "Catalog page deleted successfully",
@@ -312,6 +338,56 @@ export const deleteCatalogPage = async (
         error instanceof Error
           ? error.message
           : error,
+    });
+  }
+};
+
+// DELETE MULTIPLE
+export const deleteMultipleCatalogPages = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const catalogId = req.params.catalogId as string;
+    const pageIds: string[] = toArray(req.body.pageIds);
+
+    if (pageIds.length === 0) {
+      return res.status(400).json({
+        message: "At least one page ID is required",
+      });
+    }
+
+    const pages = await CatalogPage.find({
+      _id: { $in: pageIds },
+      catalogId,
+    });
+
+    if (pages.length === 0) {
+      return res.status(404).json({ message: "No pages found" });
+    }
+
+    await Promise.all(
+      pages
+        .filter((p) => p.publicId)
+        .map((p) => cloudinary.uploader.destroy(p.publicId as string))
+    );
+
+    await CatalogPage.deleteMany({
+      _id: { $in: pages.map((p) => p._id) },
+    });
+
+    await renumberPages(catalogId);
+
+    return res.status(200).json({
+      message: `${pages.length} page(s) deleted successfully`,
+      deletedPages: pages.map((p) => p._id),
+    });
+  } catch (error) {
+    console.error("BULK DELETE ERROR:", error);
+
+    return res.status(500).json({
+      message: "Failed to delete pages",
+      error: error instanceof Error ? error.message : error,
     });
   }
 };

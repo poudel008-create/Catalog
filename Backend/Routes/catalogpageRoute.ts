@@ -5,6 +5,7 @@ import {
   getCatalogPages,
   deleteCatalogPage,
   updateCatalogPage,
+  deleteMultipleCatalogPages,
 } from "../Controllers/catalogpageController";
 
 import { authMiddleware } from "../middleware/authMiddleware";
@@ -29,13 +30,15 @@ router.post(
 
 // Update one or multiple pages
 router.put(
-  "/:catalogId/pages",
+  "/:catalogId",
   authMiddleware,
   authorizeRoles("admin"),
-  upload.array("page", 20),
+  upload.array("pages", 20),
   updateCatalogPage
 );
 
+router.delete("/bulk/:catalogId", authMiddleware,
+  authorizeRoles("admin"), deleteMultipleCatalogPages);
 // Delete one or multiple pages
 router.delete(
   "/page/:pageId",

@@ -10,7 +10,7 @@ export const createCatalog = async (
   res: Response
 ) => {
   try {
-    const { title, description, category, subCategory  } = req.body;
+    const { title, description, category, subCategory } = req.body;
 
     if (!title) {
       return res.status(400).json({
@@ -122,27 +122,32 @@ export const getCatalog = async (
   }
 };
 
-// UPDATE CATALOG
+
 // UPDATE CATALOG
 export const updateCatalog = async (
   req: AuthRequest,
   res: Response
 ) => {
   try {
-    const { title, description, category, subCategory } = req.body;
+    const { title, description, category, subCategory } = req.body ?? {};
 
     const published =
-      req.body.published === "true" ||
-      req.body.published === true;
+      req.body?.published === "true" ||
+      req.body?.published === true;
 
     const catalog = await Catalog.findById(
       req.params.id
     );
 
-    if (!catalog) {
+
+       if (!catalog) {
       return res.status(404).json({
         message: "Catalog not found",
       });
+    }
+
+    if (req.body?.published !== undefined) {
+      catalog.published = published;
     }
 
     // Update text fields only if provided
@@ -160,10 +165,6 @@ export const updateCatalog = async (
 
     if (subCategory !== undefined) {
       catalog.subCategory = subCategory;
-    }
-
-    if (req.body.published !== undefined) {
-      catalog.published = published;
     }
 
     // Update cover image if new image is uploaded
@@ -200,9 +201,9 @@ export const updateCatalog = async (
                 if (error || !result) {
                   reject(
                     error ||
-                      new Error(
-                        "Cloudinary upload failed"
-                      )
+                    new Error(
+                      "Cloudinary upload failed"
+                    )
                   );
                   return;
                 }

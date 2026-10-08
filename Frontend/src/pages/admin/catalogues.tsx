@@ -70,24 +70,26 @@ const AdminCatalogues = () => {
   };
 
   const handleTogglePublish = async (cat: Catalog) => {
-    if (!accessToken) {
-      alert("You are not authenticated");
-      return;
-    }
+  if (!accessToken) {
+    alert("You are not authenticated");
+    return;
+  }
 
-    try {
-      const updated = await updateCatalog(
-        cat._id,
-        { published: !cat.published },
-        accessToken,
-      );
+  try {
+    const formData = new FormData();
+    formData.append("published", String(!cat.published));
 
-      setCatalogs((prev) => prev.map((c) => (c._id === cat._id ? updated : c)));
-    } catch (e: any) {
-      alert(e.message);
-    }
-  };
+    const updated = await updateCatalog(
+      cat._id,
+      formData,
+      accessToken,
+    );
 
+    setCatalogs((prev) => prev.map((c) => (c._id === cat._id ? updated : c)));
+  } catch (e: any) {
+    alert(e.message);
+  }
+};
   return (
     <AdminLayout>
       <div className="space-y-6">
