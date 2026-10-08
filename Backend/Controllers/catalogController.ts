@@ -138,7 +138,7 @@ export const updateCatalog = async (
         published,
       },
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
       }
     );
