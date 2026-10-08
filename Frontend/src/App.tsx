@@ -9,6 +9,7 @@ import ManagePages from "./pages/admin/managePages";
 import AdminCategories from "./pages/admin/categories";
 import AdminSubCategories from "./pages/admin/subcategories";
 import ProtectedRoute from "./components/protectedRoute";
+import NotFound from "./components/notFound";
 
 const App = () => {
   return (
@@ -29,6 +30,8 @@ const App = () => {
           <Route path="/admin/categories" element={<AdminCategories />} />
           <Route path="/admin/subcategories" element={<AdminSubCategories />} />
         </Route>
+
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   );

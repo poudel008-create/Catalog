@@ -3,19 +3,18 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../Models/userModel";
 
-// REGISTER
+// ==================== REGISTER ====================
+
 export const registerUser = async (req: Request, res: Response) => {
   try {
     const { name, email, password, role } = req.body;
 
-    // Check required fields
     if (!name || !email || !password) {
       return res.status(400).json({
         message: "Name, email and password are required",
       });
     }
 
-    // Check existing user
     const existingUser = await User.findOne({ email });
 
     if (existingUser) {
@@ -24,10 +23,8 @@ export const registerUser = async (req: Request, res: Response) => {
       });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
     const user = await User.create({
       name,
       email,
@@ -52,19 +49,18 @@ export const registerUser = async (req: Request, res: Response) => {
   }
 };
 
-// LOGIN
+// ==================== LOGIN ====================
+
 export const loginUser = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
-    // Check fields
     if (!email || !password) {
       return res.status(400).json({
         message: "Email and password are required",
       });
     }
 
-    // Find user
     const user = await User.findOne({ email });
 
     if (!user) {
@@ -73,7 +69,6 @@ export const loginUser = async (req: Request, res: Response) => {
       });
     }
 
-    // Compare password
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
@@ -82,21 +77,41 @@ export const loginUser = async (req: Request, res: Response) => {
       });
     }
 
-    // Create token
-    const token = jwt.sign(
-  {
-    id: user._id,
-    role: user.role,
-  },
-  process.env.ACCESS_TOKEN_SECRET as string,
-  {
-    expiresIn: "1d",
-  }
-);
+    // Access token
+    const accessToken = jwt.sign(
+      {
+        id: user._id,
+        role: user.role,
+      },
+      process.env.ACCESS_TOKEN_SECRET as string,
+      {
+        expiresIn: "15m",
+      }
+    );
+
+    // Refresh token
+    const refreshToken = jwt.sign(
+      {
+        id: user._id,
+        role: user.role,
+      },
+      process.env.REFRESH_TOKEN_SECRET as string,
+      {
+        expiresIn: "7d",
+      }
+    );
+
+    // Store refresh token in HTTP-only cookie
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: false, // true in production with HTTPS
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
 
     res.status(200).json({
       message: "Login successful",
-      token,
+      token: accessToken,
       user: {
         id: user._id,
         name: user.name,
@@ -110,4 +125,81 @@ export const loginUser = async (req: Request, res: Response) => {
       error,
     });
   }
+};
+
+// ==================== REFRESH TOKEN ====================
+
+export const refreshToken = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const token = req.cookies?.refreshToken;
+
+    if (!token) {
+      return res.status(401).json({
+        message: "Refresh token is required",
+      });
+    }
+
+    const decoded = jwt.verify(
+      token,
+      process.env.REFRESH_TOKEN_SECRET as string
+    ) as {
+      id: string;
+      role: "admin" | "user";
+    };
+
+    const user = await User.findById(decoded.id);
+
+    if (!user) {
+      return res.status(401).json({
+        message: "User not found",
+      });
+    }
+
+    // Create new access token
+    const accessToken = jwt.sign(
+      {
+        id: user._id,
+        role: user.role,
+      },
+      process.env.ACCESS_TOKEN_SECRET as string,
+      {
+        expiresIn: "15m",
+      }
+    );
+
+    res.status(200).json({
+      message: "Access token refreshed",
+      token: accessToken,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    return res.status(401).json({
+      message: "Invalid or expired refresh token",
+    });
+  }
+};
+
+// ==================== LOGOUT ====================
+
+export const logoutUser = async (
+  req: Request,
+  res: Response
+) => {
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: false,
+    sameSite: "lax",
+  });
+
+  res.status(200).json({
+    message: "Logout successful",
+  });
 };

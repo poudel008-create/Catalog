@@ -36,13 +36,13 @@ export const authReducer = (
 ): AuthState => {
   switch (action.type) {
     case "LOGIN":
-      return {
-        ...state,
-        user: action.payload.user,
-        accessToken: action.payload.accessToken,
-        isAuthenticated: true,
-        loading: false,
-      };
+  return {
+    ...state,
+    user: action.payload.user,
+    accessToken: action.payload.accessToken,
+    isAuthenticated: true,
+    loading: false,
+  };
 
     case "LOGOUT":
       return {
@@ -51,10 +51,10 @@ export const authReducer = (
       };
 
     case "SET_LOADING":
-      return {
-        ...state,
-        loading: action.payload,
-      };
+  return {
+    ...state,
+    loading: action.payload,
+  };
 
     default:
       return state;

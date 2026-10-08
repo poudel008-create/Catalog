@@ -9,6 +9,7 @@ import catalogRoute from "./Routes/catalogRoute";
 import catalogpageRoute from "./Routes/catalogpageRoute"
 import categoryRoute from "./Routes/categoryRoute"
 import subCategoryRoute from "./Routes/subCategoryRoute";
+import cookieParser from "cookie-parser";
 
 const app = express();
 
@@ -32,6 +33,7 @@ const corsOptions: cors.CorsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

@@ -60,3 +60,30 @@ export const logoutUser = async () => {
 
   return data;
 };
+
+export const refreshToken = async () => {
+  const response = await fetch(`${API_URL}/refresh-token`,
+    {
+      method: "POST",
+      credentials: "include",
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.message || "Session expired"
+    );
+  }
+
+  return {
+    user: {
+      id: data.user.id,
+      fullName: data.user.name,
+      email: data.user.email,
+      role: data.user.role,
+    },
+    accessToken: data.token,
+  };
+};
