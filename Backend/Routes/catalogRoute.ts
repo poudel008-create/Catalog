@@ -5,7 +5,7 @@ import {
   getCatalogs,
   getCatalog,
   updateCatalog,
-  deleteCatalog,
+  deleteCatalog, getPublishedCatalogs,
 } from "../Controllers/catalogController";
 import upload from "../middleware/upload";
 
@@ -15,6 +15,7 @@ const router = express.Router();
 
 // PUBLIC
 router.get("/", getCatalogs);
+router.get("/public", getPublishedCatalogs);
 router.get("/:id", getCatalog);
 
 // ADMIN ONLY

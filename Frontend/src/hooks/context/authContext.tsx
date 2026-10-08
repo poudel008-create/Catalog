@@ -15,6 +15,7 @@ import {
 import {
   AuthUser,
   refreshToken,
+  logoutUser,
 } from "../../services/authServices";
 
 interface AuthContextType extends AuthState {
@@ -38,31 +39,33 @@ export const AuthProvider = ({
     initialAuthState
   );
 
+  // RESTORE SESSION
   useEffect(() => {
-  const restoreSession = async () => {
-    try {
-      const result = await refreshToken();
+    const restoreSession = async () => {
+      try {
+        const result = await refreshToken();
 
-      dispatch({
-        type: "LOGIN",
-        payload: {
-          user: result.user,
-          accessToken: result.accessToken,
-        },
-      });
-    } catch (error) {
-      console.log("NO ACTIVE SESSION");
+        dispatch({
+          type: "LOGIN",
+          payload: {
+            user: result.user,
+            accessToken: result.accessToken,
+          },
+        });
+      } catch (error) {
+        console.log("NO ACTIVE SESSION");
 
-      dispatch({
-        type: "SET_LOADING",
-        payload: false,
-      });
-    }
-  };
+        dispatch({
+          type: "SET_LOADING",
+          payload: false,
+        });
+      }
+    };
 
-  restoreSession();
-}, []);
+    restoreSession();
+  }, []);
 
+  // LOGIN
   const login = (
     user: AuthUser,
     accessToken: string
@@ -76,10 +79,17 @@ export const AuthProvider = ({
     });
   };
 
-  const logout = () => {
-    dispatch({
-      type: "LOGOUT",
-    });
+  // LOGOUT
+  const logout = async () => {
+    try {
+      await logoutUser();
+    } catch (error) {
+      console.error("LOGOUT ERROR:", error);
+    } finally {
+      dispatch({
+        type: "LOGOUT",
+      });
+    }
   };
 
   return (

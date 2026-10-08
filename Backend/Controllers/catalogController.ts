@@ -1,4 +1,4 @@
-import { Response } from "express";
+import { Request, Response } from "express";
 import { Readable } from "stream";
 import cloudinary from "../config/cloudinary";
 import Catalog from "../Models/catalogModel";
@@ -10,7 +10,7 @@ export const createCatalog = async (
   res: Response
 ) => {
   try {
-    const { title, description } = req.body;
+    const { title, description, category, subCategory  } = req.body;
 
     if (!title) {
       return res.status(400).json({
@@ -37,6 +37,8 @@ export const createCatalog = async (
           const catalog = await Catalog.create({
             title,
             description,
+            category,
+            subCategory,
             coverImage: result.secure_url,
             createdBy: req.user?.id,
           });
@@ -56,6 +58,8 @@ export const createCatalog = async (
     const catalog = await Catalog.create({
       title,
       description,
+      category,
+      subCategory,
       createdBy: req.user?.id,
     });
 
@@ -79,19 +83,20 @@ export const getCatalogs = async (
   res: Response
 ) => {
   try {
-    const catalogs = await Catalog.find().sort({ createdAt: -1 }); /////////////////
+    const catalogs = await Catalog.find().sort({ createdAt: -1 });
 
     res.status(200).json({
       catalogs,
     });
   } catch (error) {
+    console.error("GET CATALOGS ERROR:", error);
+
     res.status(500).json({
       message: "Failed to get catalogs",
-      error,
+      error: error instanceof Error ? error.message : error,
     });
   }
 };
-
 // GET SINGLE CATALOG
 export const getCatalog = async (
   req: AuthRequest,
@@ -179,6 +184,28 @@ export const deleteCatalog = async (
     res.status(500).json({
       message: "Failed to delete catalog",
       error,
+    });
+  }
+};
+
+export const getPublishedCatalogs = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const catalogs = await Catalog.find({
+      published: true,
+    }).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      catalogs,
+    });
+  } catch (error) {
+    console.error("GET PUBLISHED CATALOGS ERROR:", error);
+
+    res.status(500).json({
+      message: "Failed to get published catalogs",
+      error: error instanceof Error ? error.message : error,
     });
   }
 };
