@@ -14,7 +14,7 @@ export interface LoginResponse {
   user: AuthUser;
   accessToken: string;
 }
-const BASE = "https://catalog-9nla55563-poudel008-create.vercel.app/api";
+const BASE = "https://catalog-jti1.onrender.com/api";
 
 
 export const loginUser = async (
