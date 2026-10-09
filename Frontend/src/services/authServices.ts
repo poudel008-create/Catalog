@@ -14,13 +14,13 @@ export interface LoginResponse {
   user: AuthUser;
   accessToken: string;
 }
-const API_URL = "https://catalog-jti1.onrender.com/api/auth";
+const BASE = "https://catalog-jti1.onrender.com/api";
 
 
 export const loginUser = async (
   loginData: LoginData
 ): Promise<LoginResponse> => {
-  const response = await fetch(`${API_URL}/login`, {
+  const response = await fetch(`${BASE}/auth/login`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -47,7 +47,7 @@ export const loginUser = async (
 };
 
 export const logoutUser = async () => {
-  const response = await fetch(`${API_URL}/logout`, {
+  const response = await fetch(`${BASE}/auth/logout`, {
     method: "POST",
     credentials: "include",
   });
@@ -62,7 +62,7 @@ export const logoutUser = async () => {
 };
 
 export const refreshToken = async () => {
-  const response = await fetch(`${API_URL}/refresh-token`,
+  const response = await fetch(`${BASE}/auth/refresh-token`,
     {
       method: "POST",
       credentials: "include",
