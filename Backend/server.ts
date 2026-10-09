@@ -15,33 +15,43 @@ import subCategoryRoute from "./Routes/subCategoryRoute";
 
 const app = express();
 
+// Allowed frontend origins
 const ALLOWED_ORIGINS = (
   process.env.CLIENT_ORIGINS ??
   "http://localhost:5173,http://localhost:5174,http://localhost:4173,https://catalog-bbcz.vercel.app"
 )
   .split(",")
-  .map((origin) => origin.trim())
+  .map((origin) => origin.trim().replace(/\/$/, ""))
   .filter(Boolean);
 
-const corsOptions: cors.CorsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
-      return callback(null, true);
-    }
+// CORS configuration
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+        return callback(null, true);
+      }
 
-    return callback(
-      new Error(`Origin ${origin} not allowed by CORS`)
-    );
-  },
+      console.error("Blocked CORS origin:", origin);
+      return callback(new Error("Origin not allowed by CORS"));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+// Handle preflight requests
+app.options(/.*/, cors({
+  origin: ALLOWED_ORIGINS,
   credentials: true,
-};
+}));
 
-app.use(cors(corsOptions));
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Initialize database and admin once per running instance.
+// Database initialization
 let initializationPromise: Promise<void> | null = null;
 
 const initializeApp = async (): Promise<void> => {
@@ -58,27 +68,32 @@ const initializeApp = async (): Promise<void> => {
   await initializationPromise;
 };
 
-// Ensure database initialization before handling API requests.
+// Initialize database before API requests
 app.use(async (_req: Request, res: Response, next: NextFunction) => {
   try {
     await initializeApp();
     next();
   } catch (error) {
     console.error("Database initialization failed:", error);
+
     res.status(500).json({
       message: "Server initialization failed",
     });
   }
 });
 
+// API routes
 app.use("/api/auth", userRoute);
 app.use("/api/catalogs", catalogRoute);
 app.use("/api/catalog-pages", catalogpageRoute);
 app.use("/api/categories", categoryRoute);
 app.use("/api/subcategories", subCategoryRoute);
 
+// Health check
 app.get("/", (_req: Request, res: Response) => {
-  res.send("Backend is running");
+  res.status(200).json({
+    message: "Backend is running",
+  });
 });
 
 // 404 handler
@@ -88,7 +103,7 @@ app.use((req: Request, res: Response) => {
   });
 });
 
-// Central error handler
+// Error handler
 app.use(
   (
     err: Error,
@@ -111,10 +126,7 @@ if (process.env.NODE_ENV !== "production") {
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
-
-
-
-  
 }
 
 export default app;
+
