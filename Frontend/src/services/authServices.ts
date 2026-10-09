@@ -1,3 +1,5 @@
+import BASE from "../config/api";
+
 export interface LoginData {
   email: string;
   password: string;
@@ -14,7 +16,7 @@ export interface LoginResponse {
   user: AuthUser;
   accessToken: string;
 }
-const BASE = "https://catalog-jti1.onrender.com/api";
+
 
 
 export const loginUser = async (

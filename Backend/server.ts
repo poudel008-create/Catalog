@@ -17,6 +17,8 @@ import subCategoryRoute from "./Routes/subCategoryRoute";
 const app = express();
 
 // Allowed frontend origins
+
+
 const ALLOWED_ORIGINS = (
   process.env.CLIENT_ORIGINS ??
   "http://localhost:5173,http://localhost:5174,http://localhost:4173,https://catalog-bbcz.vercel.app"
@@ -25,7 +27,6 @@ const ALLOWED_ORIGINS = (
   .map((origin) => origin.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
-// CORS configuration
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -34,13 +35,14 @@ app.use(
       }
 
       console.error("Blocked CORS origin:", origin);
-      return callback(new Error(`Origin ${origin} not allowed by CORS`));
+      return callback(new Error("Origin not allowed by CORS"));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
 
 // Handle preflight requests
 app.options(/.*/, cors({

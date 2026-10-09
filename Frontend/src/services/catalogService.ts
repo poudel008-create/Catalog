@@ -1,5 +1,4 @@
-const BASE = "https://catalog-jti1.onrender.com/api";
-
+import BASE from "../config/api";
 const authHeaders = (accessToken: string) => ({
   "Content-Type": "application/json",
   Authorization: `Bearer ${accessToken}`,
