@@ -17,7 +17,7 @@ const app = express();
 
 const ALLOWED_ORIGINS = (
   process.env.CLIENT_ORIGINS ??
-  "http://localhost:5173,http://localhost:5174,http://localhost:4173"
+  "http://localhost:5173,http://localhost:5174,http://localhost:4173,https://catalog-bbcz.vercel.app"
 )
   .split(",")
   .map((origin) => origin.trim())
@@ -111,6 +111,10 @@ if (process.env.NODE_ENV !== "production") {
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+
+
+
+  
 }
 
 export default app;

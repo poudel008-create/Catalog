@@ -1,4 +1,4 @@
-const BASE = "https://catalog-jti1.onrender.com/api";
+const BASE = "https://catalog-9nla55563-poudel008-create.vercel.app/api";
 
 export interface Category {
   _id: string;
