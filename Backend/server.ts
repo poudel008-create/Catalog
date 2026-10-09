@@ -1,5 +1,6 @@
 
 import "dotenv/config";
+
 import cookieParser from "cookie-parser";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
@@ -21,7 +22,7 @@ const ALLOWED_ORIGINS = (
   "http://localhost:5173,http://localhost:5174,http://localhost:4173,https://catalog-bbcz.vercel.app"
 )
   .split(",")
-  .map((origin) => origin.trim().replace(/\/$/, ""))
+  .map((origin) => origin.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
 // CORS configuration
@@ -33,7 +34,7 @@ app.use(
       }
 
       console.error("Blocked CORS origin:", origin);
-      return callback(new Error("Origin not allowed by CORS"));
+      return callback(new Error(`Origin ${origin} not allowed by CORS`));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -43,8 +44,16 @@ app.use(
 
 // Handle preflight requests
 app.options(/.*/, cors({
-  origin: ALLOWED_ORIGINS,
+  origin: (origin, callback) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`Origin ${origin} not allowed by CORS`));
+  },
   credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 }));
 
 app.use(cookieParser());
@@ -82,19 +91,19 @@ app.use(async (_req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-// API routes
-app.use("/api/auth", userRoute);
-app.use("/api/catalogs", catalogRoute);
-app.use("/api/catalog-pages", catalogpageRoute);
-app.use("/api/categories", categoryRoute);
-app.use("/api/subcategories", subCategoryRoute);
-
 // Health check
 app.get("/", (_req: Request, res: Response) => {
   res.status(200).json({
     message: "Backend is running",
   });
 });
+
+// API routes
+app.use("/api/auth", userRoute);
+app.use("/api/catalogs", catalogRoute);
+app.use("/api/catalog-pages", catalogpageRoute);
+app.use("/api/categories", categoryRoute);
+app.use("/api/subcategories", subCategoryRoute);
 
 // 404 handler
 app.use((req: Request, res: Response) => {
@@ -119,14 +128,11 @@ app.use(
   }
 );
 
-// Local development only
-if (process.env.NODE_ENV !== "production") {
-  const PORT = Number(process.env.PORT) || 5000;
+// Start server for Render and local development
+const PORT = Number(process.env.PORT) || 5000;
 
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-}
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
+});
 
 export default app;
-
