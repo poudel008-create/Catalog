@@ -9,6 +9,7 @@ import {
   Minimize2,
   X,
 } from "lucide-react";
+import "./catalogueViewer.css";
 
 type CataloguePage = {
   id: number;
@@ -27,7 +28,33 @@ type CatalogueViewerProps = {
 
 const BASE_W = 350;
 const BASE_H = 500;
+const DEFAULT_RATIO = BASE_H / BASE_W;
+const PAGE_RATIO = BASE_H / BASE_W;
+const FILL_TOLERANCE = 0.15;
 const SHIFT_MS = 650;
+const CENTER_COVERS = true;
+
+const PageImage = ({
+  src, alt,
+}: {
+  src: string;
+  alt: string;
+  eager: boolean;
+}) => (
+  <img
+    src={src}
+    alt={alt}
+    draggable={false}
+    style={{
+      display: "block",
+      width: "100%",
+      height: "100%",
+      objectFit: "contain",
+      objectPosition: "center",
+      backgroundColor: "#fdf9f5",
+    }}
+  />
+);
 
 const CatalogueViewer = ({
   pages,
@@ -114,7 +141,7 @@ const CatalogueViewer = ({
     140,
     Math.round(Math.min(BASE_W * scale, maxPageW))
   );
-  const h = Math.round((w * BASE_H) / BASE_W);
+  const h = Math.round(w * PAGE_RATIO);
 
   const getPageFlip = () => bookRef.current?.pageFlip?.();
 
@@ -122,17 +149,14 @@ const CatalogueViewer = ({
   const isLastPage = currentPage >= total - 1;
 
   const nextPage = () => {
-    if (isLastPage) return;
-    // optimistic update so the book slides at the same time as the flip
-    setCurrentPage((p) => Math.min(p === 0 ? 1 : p + 2, total - 1));
-    getPageFlip()?.flipNext();
-  };
+  if (isLastPage) return;
+  getPageFlip()?.flipNext();
+};
 
-  const previousPage = () => {
-    if (isFirstPage) return;
-    setCurrentPage((p) => Math.max(p <= 1 ? 0 : p - 2, 0));
-    getPageFlip()?.flipPrev();
-  };
+const previousPage = () => {
+  if (isFirstPage) return;
+  getPageFlip()?.flipPrev();
+};
 
   const goToFirstPage = () => getPageFlip()?.flip(0);
   const goToLastPage = () => getPageFlip()?.flip(total - 1);
@@ -156,9 +180,6 @@ const CatalogueViewer = ({
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  // --------------------------------
-  // Empty state
-  // --------------------------------
   if (!pages.length) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
@@ -167,9 +188,6 @@ const CatalogueViewer = ({
     );
   }
 
-  // --------------------------------
-  // GRID VIEW
-  // --------------------------------
   if (showGrid) {
     return (
       <div className="w-full max-w-6xl px-4">
@@ -227,17 +245,24 @@ const CatalogueViewer = ({
     );
   }
 
-  // --------------------------------
-  // FLIPBOOK VIEW
-  // --------------------------------
-
   let shiftX = 0;
-  if (!isPortrait) {
+  if (CENTER_COVERS && !isPortrait) {
     if (isFirstPage) shiftX = -w / 2;
     else if (isLastPage) shiftX = w / 2;
   }
 
   const isOpenSpread = !isFirstPage && !isLastPage;
+
+  let baseLeft = 0;
+  let baseWidth = w * 2;
+  if (isPortrait) {
+    baseWidth = w;
+  } else if (isFirstPage) {
+    baseLeft = w;
+    baseWidth = w;
+  } else if (isLastPage) {
+    baseWidth = w;
+  }
 
   const label = isFirstPage
     ? "Front cover"
@@ -251,7 +276,7 @@ const CatalogueViewer = ({
     <div
       ref={stageRef}
       className={`flex w-full flex-col items-center gap-4 ${
-        isFullscreen ? "justify-center bg-neutral-900 p-6" : ""
+        isFullscreen ? "cb-fs justify-center bg-neutral-900 p-6" : ""
       }`}
     >
       {/* Top bar */}
@@ -285,41 +310,42 @@ const CatalogueViewer = ({
           <ChevronLeft className="h-6 w-6" />
         </button>
 
-        {/* Stage: fixed size of an open book so layout never jumps */}
+        {/* Stage: exact pixel box — never grows, never scrolls */}
         <div
-          className="relative"
+          className="relative overflow-hidden"
           style={{
             width: isPortrait ? w : w * 2,
-            height: h + 24,
+            height: h,
+            flexShrink: 0,
           }}
         >
-          {/* Sliding wrapper – this is what centres the covers */}
+          {/* Sliding wrapper – centres the covers */}
           <div
-            className="absolute left-0 top-0"
+            className="absolute inset-0"
             style={{
-              width: isPortrait ? w : w * 2,
-              height: h,
-              transform: `translateX(${shiftX}px)`,
-              transition: `transform ${SHIFT_MS}ms cubic-bezier(0.645, 0.045, 0.355, 1)`,
+             transform: `translateX(${shiftX}px)`,
             }}
           >
-            {/* Book shadow on the table */}
+            {/* Static backing plate: soft shadow lives here, NOT on the pages */}
             <div
               aria-hidden
-              className="pointer-events-none absolute left-1/2 rounded-[50%] bg-black/30 blur-xl transition-all"
+              className="cb-base"
               style={{
-                bottom: -18,
-                height: 28,
-                width: isOpenSpread || isPortrait ? "92%" : "50%",
-                transform: "translateX(-50%)",
-                transitionDuration: `${SHIFT_MS}ms`,
+                left: baseLeft,
+                width: baseWidth,
+                transition: `left ${SHIFT_MS}ms cubic-bezier(0.645, 0.045, 0.355, 1), width ${SHIFT_MS}ms cubic-bezier(0.645, 0.045, 0.355, 1)`,
               }}
             />
 
-            <div className="relative h-full w-full drop-shadow-2xl">
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                overflow: "hidden",
+              }}
+            >
               <HTMLFlipBook
                 // remount when the size/orientation changes, keep current page
-                key={`${w}-${h}-${isPortrait}-${total}`}
                 ref={(instance: any) => {
                   bookRef.current = instance;
                 }}
@@ -336,7 +362,7 @@ const CatalogueViewer = ({
                 usePortrait={isPortrait}
                 startZIndex={0}
                 autoSize={false}
-                maxShadowOpacity={0.45}
+                maxShadowOpacity={0.35}
                 showCover={true}
                 drawShadow={true}
                 flippingTime={750}
@@ -358,20 +384,18 @@ const CatalogueViewer = ({
                       key={`${page.id}-${index}`}
                       // hard covers flip like real cardboard
                       data-density={isCover ? "hard" : "soft"}
-                      className="relative h-full w-full overflow-hidden bg-white"
+                      className="cb-page relative h-full w-full overflow-hidden"
                     >
                       {page.blank ? (
-                        <div className="h-full w-full bg-gradient-to-br from-white to-neutral-100" />
+                        <div className="h-full w-full" />
                       ) : page.imageUrl ? (
-                        <img
+                        <PageImage
                           src={page.imageUrl}
                           alt={page.title}
-                          className="h-full w-full object-cover"
-                          draggable={false}
-                          loading={Math.abs(index - currentPage) < 6 ? "eager" : "lazy"}
+                          eager={Math.abs(index - currentPage) < 6}
                         />
                       ) : (
-                        <div className="flex h-full w-full flex-col items-center justify-center border border-gray-200 bg-white">
+                        <div className="flex h-full w-full flex-col items-center justify-center border border-gray-200">
                           <p className="text-xl font-semibold text-gray-500">
                             {page.title}
                           </p>
@@ -381,16 +405,22 @@ const CatalogueViewer = ({
                         </div>
                       )}
 
-                      {/* Paper curve near the spine (inner pages only) */}
+                      {/* Inner pages: binding curve + soft outer edge */}
                       {!isCover && (
-                        <div
-                          aria-hidden
-                          className={`pointer-events-none absolute inset-y-0 w-12 ${
-                            isLeftPage
-                              ? "right-0 bg-gradient-to-l"
-                              : "left-0 bg-gradient-to-r"
-                          } from-black/25 via-black/5 to-transparent`}
-                        />
+                        <>
+                          <div
+                            aria-hidden
+                            className={`cb-gutter ${
+                              isLeftPage ? "cb-gutter--left" : "cb-gutter--right"
+                            }`}
+                          />
+                          <div
+                            aria-hidden
+                            className={`cb-edge ${
+                              isLeftPage ? "cb-edge--left" : "cb-edge--right"
+                            }`}
+                          />
+                        </>
                       )}
 
                       {/* Hard cover: spine hinge + soft gloss */}
@@ -398,16 +428,11 @@ const CatalogueViewer = ({
                         <>
                           <div
                             aria-hidden
-                            className={`pointer-events-none absolute inset-y-0 w-3 ${
-                              index === 0
-                                ? "left-0 bg-gradient-to-r"
-                                : "right-0 bg-gradient-to-l"
-                            } from-black/35 to-transparent`}
+                            className={`cb-hinge ${
+                              index === 0 ? "cb-hinge--front" : "cb-hinge--back"
+                            }`}
                           />
-                          <div
-                            aria-hidden
-                            className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/10"
-                          />
+                          <div aria-hidden className="cb-gloss" />
                         </>
                       )}
                     </div>
@@ -419,7 +444,7 @@ const CatalogueViewer = ({
               {!isPortrait && (
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute inset-y-0 left-1/2 w-6 -translate-x-1/2 bg-gradient-to-r from-transparent via-black/20 to-transparent transition-opacity"
+                  className="cb-spine transition-opacity"
                   style={{
                     opacity: isOpenSpread ? 1 : 0,
                     transitionDuration: `${SHIFT_MS}ms`,
