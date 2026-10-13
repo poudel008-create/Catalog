@@ -1,18 +1,21 @@
 /* ==========================================================
-   catalogueBook.css  (v2)
+   catalogueBook.css  (v5)
    Physical-book styling for CatalogueViewer.
    - Every selector is prefixed `cb-` (no collisions).
-   - NO `filter` anywhere on the flipping pages: the shadow lives on a
-     static backing plate (.cb-base), so page flips stay smooth.
+   - NO `filter` on the flipping pages: the shadow lives on a static
+     backing plate (.cb-base), so page flips stay smooth.
    - Cream paper + soft shadow, modelled on the reference screenshot.
    ========================================================== */
 
 /* ---------- 1. Static backing plate: carries the soft shadow ---------- */
+/* Transparent on purpose: a box-shadow is never painted underneath its own
+   box, so the shadow still shows around the book, but the plate can't appear
+   as a blank cream "page" while it slides or resizes behind a flipping cover. */
 .cb-base {
   position: absolute;
   top: 0;
   height: 100%;
-  background: #fdf9f5;
+  background: transparent;
   border-radius: 2px;
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.1),
@@ -87,12 +90,12 @@
   background: linear-gradient(to left, rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0));
 }
 
-/* ---------- 5. Hard covers ---------- */
+/* ---------- 5. Hard covers: hinge groove + gold foil lines ---------- */
 .cb-hinge {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 10px;
+  width: 18px;
   pointer-events: none;
 }
 .cb-hinge--front {
@@ -103,6 +106,31 @@
   right: 0;
   background: linear-gradient(to left, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0));
 }
+/* pressed-in groove */
+.cb-hinge::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: 1px 0 0 rgba(255, 255, 255, 0.35);
+}
+/* double gold foil line (silver: rgba(190, 195, 205, 0.9)) */
+.cb-hinge::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-left: 1px solid rgba(212, 175, 55, 0.85);
+  border-right: 1px solid rgba(212, 175, 55, 0.85);
+}
+.cb-hinge--front::after { left: 14px; }
+.cb-hinge--front::before { left: 5px; }
+.cb-hinge--back::after { right: 14px; }
+.cb-hinge--back::before { right: 5px; }
+
 .cb-gloss {
   position: absolute;
   inset: 0;
@@ -133,6 +161,28 @@
     rgba(0, 0, 0, 0) 100%
   );
 }
+/* thread stitches along the crease */
+.cb-spine::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 50%;
+  border-left: 2px dashed rgba(122, 84, 40, 0.6);
+  transform: translateX(-50%);
+}
+/* groove: dark line + faint highlight */
+.cb-spine::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: 1px 0 0 rgba(255, 255, 255, 0.4);
+  transform: translateX(-50%);
+}
 
 /* ---------- 7. Fullscreen (dark backdrop) ---------- */
 .cb-fs .cb-base {
@@ -142,11 +192,169 @@
     0 3px 8px rgba(0, 0, 0, 0.5);
 }
 
+/* ---------- 8. Page-stack edges ----------
+   Left = pages already turned, right = pages still ahead. Mirror images:
+   thin cream leaves separated by darker hairlines, shaded darker toward the
+   book so they read as stacked paper. */
+.cb-book-stack {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.cb-book-stack--left {
+  border-radius: 2px 0 0 2px;
+  background:
+    linear-gradient(to left, rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0) 70%),
+    repeating-linear-gradient(
+      to right,
+      #e4ddd0 0, #e4ddd0 1px,
+      #fbf8f2 1px, #fbf8f2 3px
+    );
+  box-shadow: -1px 0 0 rgba(0, 0, 0, 0.12), 0 2px 3px rgba(0, 0, 0, 0.1);
+}
+.cb-book-stack--right {
+  border-radius: 0 2px 2px 0;
+  background:
+    linear-gradient(to right, rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0) 70%),
+    repeating-linear-gradient(
+      to left,
+      #e4ddd0 0, #e4ddd0 1px,
+      #fbf8f2 1px, #fbf8f2 3px
+    );
+  box-shadow: 1px 0 0 rgba(0, 0, 0, 0.12), 0 2px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* ---------- 9. Bookmark: knot, full-height ribbon, hanging bird charm ---------- */
+.cb-charm {
+  position: absolute;
+  z-index: 5;               /* above the pages */
+  width: 12px;
+  margin-left: -6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  transition-property: opacity;
+  transition-timing-function: ease;
+}
+.cb-charm-knot {
+  position: relative;
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+  margin-bottom: -6px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffc07a, #f28c28 55%, #c85c0c);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.cb-charm-rod {
+  width: 7px;
+  border-radius: 3px 3px 2px 2px;
+  background: linear-gradient(to right, #f7a64a, #e8731a 55%, #c85c0c);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.35);
+}
+.cb-charm-rod--mid {
+  border-radius: 0;
+}
+.cb-charm-hang {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: top center;
+  animation: cb-swing 3.2s ease-in-out infinite;
+}
+.cb-charm-ring {
+  width: 7px;
+  height: 7px;
+  margin-top: -1px;
+  border: 1.5px solid #b45309;
+  border-radius: 50%;
+}
+.cb-charm-bird {
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.25));
+}
+.cb-charm-string {
+  width: 1.5px;
+  height: 4px;
+  background: #b45309;
+}
+.cb-charm-bead {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffc07a, #e8731a);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.cb-charm-loop {
+  margin-top: -2px;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.25));
+}
+@keyframes cb-swing {
+  0%, 100% { transform: rotate(-5deg); }
+  50% { transform: rotate(5deg); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cb-spine,
-  .cb-base {
+  .cb-base,
+  .cb-book-stack,
+  .cb-charm {
     transition: none !important;
   }
+  .cb-charm-hang { animation: none; }
 }
 
 
+/* Image loading shimmer animation */
+.page-image-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #fdf9f5;
+}
+
+.page-image-wrapper::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    #fdf9f5 30%,
+    #eadfd3 50%,
+    #fdf9f5 70%
+  );
+  background-size: 200% 100%;
+  animation: kajariaShimmer 1.2s linear infinite;
+}
+
+.page-image-wrapper.image-loaded::before {
+  display: none;
+}
+
+.page-image-wrapper img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  opacity: 0;
+  transition: opacity 400ms ease;
+}
+
+.page-image-wrapper.image-loaded img {
+  opacity: 1;
+}
+
+@keyframes kajariaShimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
