@@ -16,7 +16,7 @@ const App = () => {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public Catalogue */}
+        {/* Public Catalogue */}  
         <Route path="/" element={<Pages />} />
 
         {/* Admin Login */}

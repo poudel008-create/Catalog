@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import HTMLFlipBook from "react-pageflip";
 import {
   ChevronLeft,
@@ -14,13 +22,17 @@ import "./catalogueViewer.css";
 type CataloguePage = {
   id: number;
   title: string;
+  description?: string;
   imageUrl?: string;
   blank?: boolean;
+  intro?: boolean;
   isCover?: boolean;
 };
 
 type CatalogueViewerProps = {
   pages: CataloguePage[];
+  title?: string;
+  description?: string;
   zoom?: number;
   soundOn?: boolean;
   showGrid?: boolean;
@@ -28,23 +40,18 @@ type CatalogueViewerProps = {
 
 const BASE_W = 350;
 const BASE_H = 500;
-const DEFAULT_RATIO = BASE_H / BASE_W;
 const PAGE_RATIO = BASE_H / BASE_W;
-const FILL_TOLERANCE = 0.15;
 
-// Slower, controlled flip. Increase for slower, decrease for faster.
 const FLIP_MS = 1500;
-// Cover-centering slide lasts exactly as long as the flip
 const SHIFT_MS = FLIP_MS;
 const CENTER_COVERS = true;
-
-// Shared easing, room beside the book for page-stack edges, stack sizing
 const SHIFT_EASE = "cubic-bezier(0.645, 0.045, 0.355, 1)";
-const STACK_PAD = 16; // px of room each side of the book for the stack edges
-const STACK_MAX = 14; // max stack thickness in px
-const STACK_STEP = 1.1; // px of thickness per page
+const OPEN_EASE = "cubic-bezier(0.1, 0.6, 0.3, 1)";
 
-// Bookmark charm: room above the book for the knot, below for the hanging charm
+const STACK_RATIO = 0.09;
+const STACK_LEAF = 2;
+const BIND_W = 3;
+
 const CHARM_TOP = 16;
 const CHARM_DROP = 110;
 
@@ -58,26 +65,41 @@ const PageImage = ({
   eager: boolean;
 }) => {
   const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    const el = imgRef.current;
+    if (el && el.complete && el.naturalWidth > 0) setLoaded(true);
+  });
+
+  if (failed) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-[#fdf9f5] p-4 text-center text-sm text-gray-400">
+        {alt}
+      </div>
+    );
+  }
 
   return (
-    <div
-      className={`page-image-wrapper ${loaded ? "image-loaded" : ""}`}
-    >
+    <div className={`page-image-wrapper ${loaded ? "image-loaded" : ""}`}>
       <img
+        ref={imgRef}
         src={src}
         alt={alt}
         draggable={false}
         loading={eager ? "eager" : "lazy"}
         onLoad={() => setLoaded(true)}
-        onError={() => setLoaded(false)}
+        onError={() => setFailed(true)}
       />
     </div>
   );
 };
 
-
 const CatalogueViewer = ({
   pages,
+  title,
+  description,
   zoom = 100,
   soundOn = true,
   showGrid = false,
@@ -85,62 +107,114 @@ const CatalogueViewer = ({
   const bookRef = useRef<any>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const pageSoundRef = useRef<HTMLAudioElement | null>(null);
-  // react-pageflip registers its handlers once, so they must read live
-  // values through a ref instead of closing over stale props/state
-  const liveRef = useRef({ isPortrait: false, total: 0 });
+  const liveRef = useRef({ isPortrait: false, total: 0, split: false });
+  const lockRef = useRef(0);
+  const forcedRef = useRef<number | null>(null);
+  const [snap, setSnap] = useState({ front: false, back: false });
   const soundOnRef = useRef(soundOn);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const soundBufferRef = useRef<AudioBuffer | null>(null);
+  const soundOffsetRef = useRef(0);
+  const lastSoundRef = useRef(0);
 
   const [currentPage, setCurrentPage] = useState(0);
-  // Where the book is heading (updates when a flip STARTS, not when it ends)
   const [layoutPage, setLayoutPage] = useState(0);
   const [lightboxPage, setLightboxPage] = useState<CataloguePage | null>(null);
   const [stageWidth, setStageWidth] = useState(1000);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  // The book is only created once the real container width is known, so it
-  // never starts at the placeholder size and then gets re-created at the real one.
   const [measured, setMeasured] = useState(false);
-  // True while a page is turning or being dragged; the spine overlay hides then
   const [isFlipping, setIsFlipping] = useState(false);
+  const [bookHidden, setBookHidden] = useState(false);
 
-  const bookPages = useMemo<CataloguePage[]>(() => {
-    if (pages.length > 2 && pages.length % 2 === 1) {
-      const copy = [...pages];
-      copy.splice(copy.length - 1, 0, {
-        id: -1,
-        title: "",
-        blank: true,
-      });
-      return copy;
+  const inner = useMemo<CataloguePage[]>(() => {
+    const list: CataloguePage[] = [
+      {
+        id: -2,
+        title: title || pages[0]?.title || "Catalogue",
+        description: description ?? pages[0]?.description,
+        intro: true,
+      },
+      ...pages.slice(1, -1),
+    ];
+    if (list.length % 2 === 1) {
+      list.push({ id: -1, title: "", blank: true });
     }
-    return pages;
-  }, [pages]);
+    return list;
+  }, [pages, title, description]);
 
+  const frontPage = pages[0];
+  const backPage = pages[pages.length - 1];
+
+  const bookPages = useMemo<CataloguePage[]>(
+    () => (frontPage ? [frontPage, ...inner, backPage] : []),
+    [frontPage, inner, backPage]
+  );
+
+  const innerTotal = inner.length;
   const total = bookPages.length;
 
-useEffect(() => {
-  const audio = new Audio("/sounds/pageturn.mp3");
-  audio.preload = "auto";
-  audio.volume = 0.6;
-  pageSoundRef.current = audio;
+  useEffect(() => {
+    const audio = new Audio("/sounds/pageturn.mp3");
+    audio.preload = "auto";
+    audio.volume = 0.6;
+    pageSoundRef.current = audio;
 
-  return () => {
-    pageSoundRef.current = null;
-  };
-}, []);
+    let cancelled = false;
+    const Ctx: typeof AudioContext | undefined =
+      window.AudioContext || (window as any).webkitAudioContext;
+    if (Ctx) {
+      const ctx = new Ctx();
+      audioCtxRef.current = ctx;
+      fetch("/sounds/pageturn.mp3")
+        .then((r) => r.arrayBuffer())
+        .then((data) => ctx.decodeAudioData(data))
+        .then((buf) => {
+          if (cancelled) return;
+          const ch = buf.getChannelData(0);
+          let i = 0;
+          while (i < ch.length && Math.abs(ch[i]) < 0.02) i++;
+          soundOffsetRef.current = Math.max(0, i / buf.sampleRate - 0.01);
+          soundBufferRef.current = buf;
+        })
+        .catch(() => {});
+    }
 
-const playSound = useCallback(() => {
-  const audio = pageSoundRef.current;
-  if (!audio) return;
+    return () => {
+      cancelled = true;
+      pageSoundRef.current = null;
+      soundBufferRef.current = null;
+      audioCtxRef.current?.close().catch(() => {});
+      audioCtxRef.current = null;
+    };
+  }, []);
 
-  if (!soundOnRef.current) {
-    audio.pause();
+  const playSound = useCallback(() => {
+    if (!soundOnRef.current) return;
+
+    const now = performance.now();
+    if (now - lastSoundRef.current < 300) return;
+    lastSoundRef.current = now;
+
+    const ctx = audioCtxRef.current;
+    const buf = soundBufferRef.current;
+    if (ctx && buf) {
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      const src = ctx.createBufferSource();
+      const gain = ctx.createGain();
+      src.buffer = buf;
+      src.playbackRate.value = 1.25;
+      gain.gain.value = 0.6;
+      src.connect(gain);
+      gain.connect(ctx.destination);
+      src.start(0, soundOffsetRef.current);
+      return;
+    }
+
+    const audio = pageSoundRef.current;
+    if (!audio) return;
     audio.currentTime = 0;
-    return;
-  }
-
-  audio.currentTime = 0;
-  audio.play().catch(() => {});
-}, []);
+    audio.play().catch(() => {});
+  }, []);
 
   useEffect(() => {
     const el = stageRef.current;
@@ -170,88 +244,240 @@ const playSound = useCallback(() => {
   };
 
   const isPortrait = stageWidth < 720;
+  const split = !isPortrait && total >= 4;
   const scale = zoom / 100;
 
-  // Keep the ref in sync on every render so playSound always reads the live value
   soundOnRef.current = soundOn;
+  liveRef.current = { isPortrait, total, split };
 
-  liveRef.current = { isPortrait, total };
+  const chromeW = isPortrait ? 120 : 150;
+  const maxPageW =
+    (stageWidth - chromeW - 4) / ((isPortrait ? 1 : 2) + 2 * STACK_RATIO);
 
-  // The charm only exists in the two-page (landscape) view
-  const topPad = isPortrait ? 0 : CHARM_TOP;
-  const dropPad = isPortrait ? 0 : CHARM_DROP;
-
-  // fit the book inside the available width (also reserves the stack padding)
-  const reservedSides = (isPortrait ? 120 : 150) + STACK_PAD * 2;
-  const maxPageW = isPortrait
-    ? stageWidth - reservedSides
-    : (stageWidth - reservedSides) / 2;
-
-  const w = Math.max(
-    140,
-    Math.round(Math.min(BASE_W * scale, maxPageW))
-  );
+  const w = Math.max(140, Math.round(Math.min(BASE_W * scale, maxPageW)));
   const h = Math.round(w * PAGE_RATIO);
+
+  const [settledW, setSettledW] = useState(w);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setSettledW(w));
+    return () => cancelAnimationFrame(id);
+  }, [w]);
+  const resizing = settledW !== w;
+
+  const k = w / BASE_W;
+  const stackMax = w * STACK_RATIO;
+  const leaves = Math.max(1, (total - 1) / 2);
+  const leafUnit = Math.min(STACK_LEAF * k, stackMax / leaves);
+  const stackPad = Math.ceil(leafUnit * leaves) + 2;
+
+  const charmTop = Math.round(CHARM_TOP * k);
+  const charmDrop = Math.round(CHARM_DROP * k);
+  const topPad = isPortrait ? 0 : charmTop;
+  const dropPad = isPortrait ? 0 : charmDrop;
+  const rodTop = Math.round(8 * k);
+  const rodBottom = Math.round(18 * k);
+  const rodMid = h + charmTop + Math.round(2 * k) - rodTop - rodBottom;
 
   const getPageFlip = () => bookRef.current?.pageFlip?.();
 
   const isFirstPage = currentPage === 0;
   const isLastPage = currentPage >= total - 1;
 
-  // Layout follows the flip target, not the finished flip
   const layoutFirst = layoutPage === 0;
   const layoutLast = layoutPage >= total - 1;
 
+  const spreadOf = (index: number) =>
+    isPortrait || index === 0 ? index : index % 2 === 1 ? index : index - 1;
+
+  const fToG = (fl: number) => {
+    const count = liveRef.current.total;
+    return fl === 0 ? 1 : fl >= count - 2 ? count - 1 : fl + 1;
+  };
+
+  const gToF = (g: number) => {
+    if (g >= total - 1) return total - 2;
+    if (g <= 1) return 0;
+    const left = g % 2 === 1 ? g : g - 1;
+    return left - 1;
+  };
+
+  const locked = () => performance.now() < lockRef.current;
+  const lockFor = (ms: number) => {
+    lockRef.current = performance.now() + ms;
+  };
+
   const nextPage = () => {
     if (isLastPage) return;
+    if (split) {
+      if (locked()) return;
+      playSound();
+      if (currentPage === 0) {
+        lockFor(FLIP_MS * 0.6);
+        setLayoutPage(1);
+        setCurrentPage(1);
+        return;
+      }
+      setLayoutPage(currentPage >= total - 3 ? total - 1 : currentPage + 2);
+      getPageFlip()?.flipNext();
+      return;
+    }
+    playSound();
+    setLayoutPage(
+      Math.min(
+        total - 1,
+        isPortrait ? currentPage + 1 : currentPage === 0 ? 1 : currentPage + 2
+      )
+    );
     getPageFlip()?.flipNext();
   };
 
   const previousPage = () => {
     if (isFirstPage) return;
+    if (split) {
+      if (locked()) return;
+      playSound();
+      if (currentPage === 1) {
+        lockFor(FLIP_MS * 0.6);
+        setLayoutPage(0);
+        setCurrentPage(0);
+        return;
+      }
+      setLayoutPage(currentPage >= total - 1 ? total - 3 : currentPage - 2);
+      getPageFlip()?.flipPrev();
+      return;
+    }
+    playSound();
+    setLayoutPage(
+      Math.max(
+        0,
+        isPortrait ? currentPage - 1 : currentPage <= 1 ? 0 : currentPage - 2
+      )
+    );
     getPageFlip()?.flipPrev();
   };
 
-  const goToFirstPage = () => getPageFlip()?.flip(0);
-  const goToLastPage = () => getPageFlip()?.flip(total - 1);
-  const goToPage = (index: number) => getPageFlip()?.flip(index);
+  const goToPage = (index: number) => {
+    const g = Math.max(0, Math.min(total - 1, index));
+    if (g === currentPage) return;
+    if (split) {
+      const sOf = (x: number) =>
+        x === 0
+          ? 0
+          : x >= total - 1
+          ? total / 2
+          : (spreadOf(x) - 1) / 2 + 1;
+      const diff = sOf(g) - sOf(currentPage);
+      if (diff === 0 || locked()) return;
+      if (diff === 1) {
+        nextPage();
+        return;
+      }
+      if (diff === -1) {
+        previousPage();
+        return;
+      }
+
+      playSound();
+      lockFor(FLIP_MS + 400);
+      const toBack = g >= total - 1;
+      const target = g === 0 || toBack ? g : spreadOf(g);
+      const fl = g === 0 ? 0 : toBack ? total - 4 : gToF(g);
+      const leaveFront = layoutPage === 0 && target !== 0;
+      const leaveBack = layoutPage === total - 1 && target !== total - 1;
+      setBookHidden(true);
+      setTimeout(() => {
+        const pf = getPageFlip();
+        if (leaveFront || leaveBack) {
+          setSnap({ front: leaveFront, back: leaveBack });
+          setTimeout(() => setSnap({ front: false, back: false }), 150);
+        }
+        forcedRef.current = toBack ? null : target;
+        pf?.turnToPage?.(fl);
+        setIsFlipping(false);
+        setLayoutPage(target);
+        setCurrentPage(toBack ? total - 3 : target);
+        requestAnimationFrame(() => {
+          setBookHidden(false);
+          if (toBack) {
+            lastSoundRef.current = performance.now();
+            pf?.flipNext?.();
+          }
+        });
+        setTimeout(() => {
+          forcedRef.current = null;
+        }, 400);
+      }, 190);
+      return;
+    }
+    playSound();
+    setLayoutPage(spreadOf(g));
+    getPageFlip()?.flip(g);
+  };
+  const goToFirstPage = () => goToPage(0);
+  const goToLastPage = () => goToPage(total - 1);
 
   const handleFlip = (event: { data: number }) => {
-    setCurrentPage(event.data);
-    setLayoutPage(event.data);
+    if (liveRef.current.split) {
+      const fl = event.data;
+      const forced = forcedRef.current;
+      if (forced !== null) {
+        setCurrentPage(forced);
+        setLayoutPage(forced);
+        setIsFlipping(false);
+        return;
+      }
+      setCurrentPage((prev) => (fl === 0 && prev === 0 ? 0 : fToG(fl)));
+      setLayoutPage((prev) => (fl === 0 && prev === 0 ? 0 : fToG(fl)));
+    } else {
+      setCurrentPage(event.data);
+      setLayoutPage(event.data);
+    }
     setIsFlipping(false);
-    playSound(); // click, drag, swipe, buttons, keyboard – everything
   };
 
-  // Predict the target page when a flip STARTS so the plate, stack, charm and
-  // centering move together with the animation instead of snapping at the end
   const handleChangeState = (e: { data: string }) => {
     const pf = getPageFlip();
     if (!pf) return;
 
     if (e.data === "read") {
-      // flip finished or was cancelled (drag released back): resync
       setIsFlipping(false);
-      setLayoutPage(pf.getCurrentPageIndex());
+      const idx = pf.getCurrentPageIndex();
+      if (liveRef.current.split) {
+        const forced = forcedRef.current;
+        forcedRef.current = null;
+        if (forced !== null) {
+          setLayoutPage(forced);
+          return;
+        }
+        setLayoutPage((prev) => (idx === 0 && prev === 0 ? 0 : fToG(idx)));
+      } else {
+        setLayoutPage(idx);
+      }
       return;
     }
     if (e.data === "user_fold") {
-      setIsFlipping(true); // page is being dragged across the spine
+      setIsFlipping(true);
       return;
     }
     if (e.data !== "flipping") return;
     setIsFlipping(true);
+    playSound();
 
     setTimeout(() => {
-      const { isPortrait: portrait, total: count } = liveRef.current;
-      const dir = pf
-        .getFlipController?.()
-        ?.getCalculation?.()
-        ?.getDirection?.();
-      if (dir === undefined || dir === null) return; // fallback: sync at end of flip
+      const { isPortrait: portrait, total: count, split: sp } = liveRef.current;
+      const dir =
+        pf.getFlipController?.()?.getCalculation?.()?.getDirection?.() ??
+        pf.getRender?.()?.getDirection?.();
+      if (dir === undefined || dir === null) return;
       const cur = pf.getCurrentPageIndex();
+      if (sp) {
+        if (forcedRef.current !== null) return;
+        const nextFl = dir === 0 ? cur + 2 : Math.max(0, cur - 2);
+        setLayoutPage(Math.max(1, Math.min(count - 1, fToG(nextFl))));
+        return;
+      }
       const next =
-        dir === 0 // forward
+        dir === 0
           ? cur === 0 && !portrait
             ? 1
             : cur + (portrait ? 1 : 2)
@@ -264,7 +490,6 @@ const playSound = useCallback(() => {
     }, 0);
   };
 
-  // Keyboard
   useEffect(() => {
     if (showGrid) return;
     const onKey = (e: KeyboardEvent) => {
@@ -361,15 +586,144 @@ const playSound = useCallback(() => {
     baseWidth = w;
   }
 
-  // Page-stack thickness on each side (left = turned pages, right = pages ahead)
   const behind = layoutPage;
   const ahead = Math.max(
     0,
     total - layoutPage - (isPortrait || layoutFirst ? 1 : 2)
   );
-  const stackL = Math.min(STACK_MAX, behind * STACK_STEP);
-  const stackR = Math.min(STACK_MAX, ahead * STACK_STEP);
-  const stackTransition = `left ${SHIFT_MS}ms ${SHIFT_EASE}, width ${SHIFT_MS}ms ${SHIFT_EASE}, opacity ${SHIFT_MS}ms`;
+  const stackL = isPortrait ? 0 : (behind / 2) * leafUnit;
+  const stackR = (ahead / 2) * leafUnit;
+  const bindW = Math.max(2, Math.round(BIND_W * k));
+  const stackTransition = resizing
+    ? "none"
+    : `left ${SHIFT_MS}ms ${SHIFT_EASE}, width ${SHIFT_MS}ms ${SHIFT_EASE}`;
+
+  const pageBody = (
+    page: CataloguePage,
+    opts: { cover: boolean; left: boolean; hingeBack: boolean; eager: boolean }
+  ) => (
+    <>
+      {page.intro ? (
+        <div className="cb-intro">
+          <h2 className="cb-intro-title">{page.title}</h2>
+          {page.description && (
+            <p className="cb-intro-desc">{page.description}</p>
+          )}
+        </div>
+      ) : page.blank ? (
+        <div className="h-full w-full" />
+      ) : page.imageUrl ? (
+        <PageImage src={page.imageUrl} alt={page.title} eager={opts.eager} />
+      ) : (
+        <div className="flex h-full w-full flex-col items-center justify-center border border-gray-200">
+          <p className="text-xl font-semibold text-gray-500">{page.title}</p>
+          <p className="mt-1 text-sm text-gray-300">Page {page.id}</p>
+        </div>
+      )}
+
+      {!opts.cover && (
+        <>
+          <div
+            aria-hidden
+            className={`cb-gutter ${
+              opts.left ? "cb-gutter--left" : "cb-gutter--right"
+            }`}
+          />
+          <div
+            aria-hidden
+            className={`cb-edge ${
+              opts.left ? "cb-edge--left" : "cb-edge--right"
+            }`}
+          />
+        </>
+      )}
+
+      {opts.cover && (
+        <>
+          <div
+            aria-hidden
+            className={`cb-hinge ${
+              opts.hingeBack ? "cb-hinge--back" : "cb-hinge--front"
+            }`}
+          />
+          <div aria-hidden className="cb-gloss" />
+        </>
+      )}
+    </>
+  );
+
+  const flipItems = split
+    ? [
+        { page: { id: -3, title: "", blank: true } as CataloguePage, g: -1, ghost: true },
+        ...bookPages
+          .slice(2, total - 1)
+          .map((page, i) => ({ page, g: i + 2, ghost: false })),
+        { page: { id: -4, title: "", blank: true } as CataloguePage, g: -2, ghost: false },
+      ]
+    : bookPages.map((page, index) => ({ page, g: index, ghost: false }));
+
+  const leafShell = (
+    angle: number,
+    over: boolean,
+    front: ReactNode,
+    back: ReactNode,
+    onClick: () => void,
+    instant: boolean
+  ) => (
+    <div
+      style={{
+        position: "absolute",
+        left: w,
+        top: 0,
+        width: w,
+        height: "100%",
+        perspective: 6000,
+        perspectiveOrigin: "0% 50%",
+        zIndex: over ? 3 : 0,
+        opacity: bookHidden ? 0 : 1,
+        transition: resizing
+          ? "none"
+          : `z-index ${instant ? 0 : 0}s linear ${instant ? 0 : FLIP_MS / 2}ms, opacity ${
+              bookHidden ? 160 : 220
+            }ms ease`,
+        pointerEvents: over ? "auto" : "none",
+        cursor: "pointer",
+      }}
+      onClick={onClick}
+    >
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          transformStyle: "preserve-3d",
+          transformOrigin: "0% 50%",
+          transform: `rotateY(${angle}deg)`,
+          transition:
+            resizing || instant
+              ? "none"
+              : `transform ${FLIP_MS}ms ${SHIFT_EASE}`,
+        }}
+      >
+        <div
+          className="cb-page cb-face"
+          style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden" }}
+        >
+          {front}
+        </div>
+        <div
+          className="cb-page cb-face"
+          style={{
+            position: "absolute",
+            inset: 0,
+            backfaceVisibility: "hidden",
+            transform: "rotateY(180deg)",
+          }}
+        >
+          {back}
+        </div>
+      </div>
+    </div>
+  );
 
   const label = isFirstPage
     ? "Front cover"
@@ -382,11 +736,11 @@ const playSound = useCallback(() => {
   return (
     <div
       ref={stageRef}
+      style={{ "--cb-u": `${k}px` } as CSSProperties}
       className={`flex w-full flex-col items-center gap-4 ${
         isFullscreen ? "cb-fs justify-center bg-neutral-900 p-6" : ""
       }`}
     >
-      {/* Top bar */}
       <div className="flex items-center gap-2">
         <div className="rounded-full bg-background/80 px-3 py-1 text-sm font-medium text-muted-foreground shadow-sm backdrop-blur">
           {label} · {currentPage + 1} / {total}
@@ -405,188 +759,166 @@ const playSound = useCallback(() => {
         </button>
       </div>
 
-      {/* Book + side buttons */}
       <div className="flex items-center gap-4">
         <button
           onClick={previousPage}
           disabled={isFirstPage}
           aria-label="Previous page"
           title="Previous page"
-          // keeps the arrow level with the middle of the book, not the charm area
           style={{ marginBottom: dropPad - topPad }}
           className="z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-background shadow-md transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-30"
         >
           <ChevronLeft className="h-6 w-6" />
         </button>
 
-        {/* Stage: exact pixel box — never grows, never scrolls */}
         <div
           className="relative overflow-hidden"
           style={{
-            // widened by the stack padding, heightened by the charm room
-            width: (isPortrait ? w : w * 2) + STACK_PAD * 2,
+            width: (isPortrait ? w : w * 2) + stackPad * 2,
             height: h + topPad + dropPad,
             flexShrink: 0,
           }}
         >
-          {/* Sliding wrapper – centres the covers (animated) */}
           <div
             className="absolute"
             style={{
               top: topPad,
               bottom: dropPad,
-              left: STACK_PAD,
-              right: STACK_PAD,
+              left: stackPad,
+              right: stackPad,
               transform: `translateX(${shiftX}px)`,
-              transition: `transform ${SHIFT_MS}ms ${SHIFT_EASE}`,
+              transition: resizing
+                ? "none"
+                : `transform ${SHIFT_MS}ms ${shiftX === 0 ? OPEN_EASE : SHIFT_EASE}`,
             }}
           >
-            {/* Static backing plate: soft shadow lives here, NOT on the pages */}
             <div
-              aria-hidden
-              className="cb-base"
-              style={{
-                left: baseLeft,
-                width: baseWidth,
-                transition: `left ${SHIFT_MS}ms ${SHIFT_EASE}, width ${SHIFT_MS}ms ${SHIFT_EASE}`,
-              }}
-            />
+  aria-hidden
+  className="cb-base"
+  style={{
+    left: baseLeft,
+    width: baseWidth,
+    transition: stackTransition,
+    opacity: 0,
+    pointerEvents: "none",
+  }}
+/>
 
-            {/* Page-stack edges */}
-            <div
-              aria-hidden
-              className="cb-book-stack cb-book-stack--left"
-              style={{
-                left: baseLeft - stackL,
-                width: stackL,
-                opacity: stackL > 0 ? 1 : 0,
-                transition: stackTransition,
-              }}
-            />
+            {isPortrait ? (
+              <div
+                aria-hidden
+                className="cb-book-binding"
+                style={{ left: baseLeft - bindW, width: bindW }}
+              />
+            ) : (
+              <div
+                aria-hidden
+                className="cb-book-stack cb-book-stack--left"
+                style={{
+                  left: baseLeft - stackL,
+                  width: stackL,
+                  transition: stackTransition,
+                }}
+              />
+            )}
             <div
               aria-hidden
               className="cb-book-stack cb-book-stack--right"
               style={{
                 left: baseLeft + baseWidth,
                 width: stackR,
-                opacity: stackR > 0 ? 1 : 0,
                 transition: stackTransition,
               }}
             />
 
             <div
+              className={
+                split &&
+                (currentPage === 0 ||
+                  currentPage >= total - 1 ||
+                  layoutPage === 0 ||
+                  layoutPage >= total - 1)
+                  ? "cb-noshadow"
+                  : undefined
+              }
               style={{
                 position: "absolute",
                 inset: 0,
                 overflow: "hidden",
+                zIndex: 1,
+                opacity: bookHidden ? 0 : 1,
+                transition: `opacity ${bookHidden ? 160 : 220}ms ease`,
               }}
             >
+              <style>{`.cb-noshadow .stf__outerShadow,.cb-noshadow .stf__innerShadow,.cb-noshadow .stf__hardShadow,.cb-noshadow .stf__hardInnerShadow{display:none!important}`}</style>
               {measured && (
-              <HTMLFlipBook
-                // remount when the size/orientation changes, keep current page
-                // (the key makes that true: react-pageflip only reads
-                // size/orientation when it is created)
-                key={`${w}x${h}-${isPortrait ? "p" : "l"}`}
-                ref={(instance: any) => {
-                  bookRef.current = instance;
-                }}
-                className="catalogue-book"
-                style={{}}
-                width={w}
-                height={h}
-                size="fixed"
-                startPage={currentPage}
-                minWidth={w}
-                maxWidth={w}
-                minHeight={h}
-                maxHeight={h}
-                usePortrait={isPortrait}
-                startZIndex={0}
-                autoSize={false}
-                maxShadowOpacity={0.35}
-                showCover={true}
-                drawShadow={true}
-                flippingTime={FLIP_MS}
-                useMouseEvents={true}
-                mobileScrollSupport={true}
-                swipeDistance={30}
-                clickEventForward={false}
-                // With false, every re-render (including the state updates at
-                // the start/end of a flip) made react-pageflip rebuild all
-                // pages mid-animation, which blanked the pages near the covers.
-                renderOnlyPageLengthChange={true}
-                disableFlipByClick={false}
-                onFlip={handleFlip}
-                onChangeState={handleChangeState}
-              >
-                {bookPages.map((page, index) => {
-                  const isCover = page.isCover ?? (index === 0 || index === total - 1);
-                  // with showCover: even index = right page, odd = left page
-                  const isLeftPage = index % 2 === 1;
-
-                  return (
-                    <div
-                      key={`${page.id}-${index}`}
-                      // hard covers flip like real cardboard
-                      data-density={isCover ? "hard" : "soft"}
-                      className="cb-page relative h-full w-full overflow-hidden"
-                    >
-                      {page.blank ? (
-                        <div className="h-full w-full" />
-                      ) : page.imageUrl ? (
-                        <PageImage
-                          src={page.imageUrl}
-                          alt={page.title}
-                          eager={Math.abs(index - currentPage) < 6}
+                <HTMLFlipBook
+                  key={`${w}x${h}-${isPortrait ? "p" : "l"}`}
+                  ref={(instance: any) => {
+                    bookRef.current = instance;
+                  }}
+                  className="catalogue-book"
+                  style={{}}
+                  width={w}
+                  height={h}
+                  size="fixed"
+                  startPage={split ? gToF(currentPage) : currentPage}
+                  minWidth={w}
+                  maxWidth={w}
+                  minHeight={h}
+                  maxHeight={h}
+                  usePortrait={isPortrait}
+                  startZIndex={0}
+                  autoSize={false}
+                  maxShadowOpacity={0.35}
+                  showCover={!split}
+                  drawShadow={true}
+                  flippingTime={FLIP_MS}
+                  useMouseEvents={true}
+                  mobileScrollSupport={true}
+                  swipeDistance={30}
+                  clickEventForward={false}
+                  renderOnlyPageLengthChange={true}
+                  disableFlipByClick={false}
+                  onFlip={handleFlip}
+                  onChangeState={handleChangeState}
+                >
+                  {flipItems.map(({ page, g, ghost }, index) => {
+                    if (ghost) {
+                      return (
+                        <div
+                          key={`${page.id}-${index}`}
+                          data-density="soft"
+                          className="relative h-full w-full"
+                          style={{ background: "transparent" }}
                         />
-                      ) : (
-                        <div className="flex h-full w-full flex-col items-center justify-center border border-gray-200">
-                          <p className="text-xl font-semibold text-gray-500">
-                            {page.title}
-                          </p>
-                          <p className="mt-1 text-sm text-gray-300">
-                            Page {page.id}
-                          </p>
-                        </div>
-                      )}
+                      );
+                    }
+                    const isCover =
+                      !split &&
+                      (page.isCover ?? (g === 0 || g === total - 1));
+                    const isLeftPage = split
+                      ? index % 2 === 0
+                      : !isPortrait && g % 2 === 1;
 
-                      {/* Inner pages: binding curve + soft outer edge */}
-                      {!isCover && (
-                        <>
-                          <div
-                            aria-hidden
-                            className={`cb-gutter ${
-                              isLeftPage ? "cb-gutter--left" : "cb-gutter--right"
-                            }`}
-                          />
-                          <div
-                            aria-hidden
-                            className={`cb-edge ${
-                              isLeftPage ? "cb-edge--left" : "cb-edge--right"
-                            }`}
-                          />
-                        </>
-                      )}
-
-                      {/* Hard cover: spine hinge + soft gloss */}
-                      {isCover && (
-                        <>
-                          <div
-                            aria-hidden
-                            className={`cb-hinge ${
-                              index === 0 ? "cb-hinge--front" : "cb-hinge--back"
-                            }`}
-                          />
-                          <div aria-hidden className="cb-gloss" />
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </HTMLFlipBook>
+                    return (
+                      <div
+                        key={`${page.id}-${index}`}
+                        data-density={isCover ? "hard" : "soft"}
+                        className="cb-page relative h-full w-full overflow-hidden"
+                      >
+                        {pageBody(page, {
+                          cover: isCover,
+                          left: isLeftPage,
+                          hingeBack: !isPortrait && g !== 0,
+                          eager: total <= 80 || Math.abs(g - currentPage) < 8,
+                        })}
+                      </div>
+                    );
+                  })}
+                </HTMLFlipBook>
               )}
 
-              {/* Centre spine crease – only while the book is open */}
               {!isPortrait && (
                 <div
                   aria-hidden
@@ -599,35 +931,90 @@ const playSound = useCallback(() => {
               )}
             </div>
 
-            {/* Bookmark: knot on top, full-height ribbon along the spine,
-                hanging bird charm below (open spread, landscape only).
-                Sits AFTER the flip book so it draws on top of the pages. */}
+            {split && (
+              <>
+                {leafShell(
+                  layoutFirst ? 0 : -180,
+                  layoutFirst,
+                  pageBody(bookPages[0], {
+                    cover: true,
+                    left: false,
+                    hingeBack: false,
+                    eager: true,
+                  }),
+                  pageBody(bookPages[1], {
+                    cover: false,
+                    left: true,
+                    hingeBack: false,
+                    eager: true,
+                  }),
+                  nextPage,
+                  snap.front
+                )}
+                {leafShell(
+                  layoutLast ? -180 : 0,
+                  layoutLast,
+                  pageBody({ id: -5, title: "", blank: true }, {
+                    cover: false,
+                    left: false,
+                    hingeBack: false,
+                    eager: true,
+                  }),
+                  pageBody(bookPages[total - 1], {
+                    cover: true,
+                    left: false,
+                    hingeBack: true,
+                    eager: true,
+                  }),
+                  previousPage,
+                  snap.back
+                )}
+                {layoutPage === 1 && (
+                  <div
+                    onClick={previousPage}
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      width: w,
+                      height: "100%",
+                      zIndex: 2,
+                      cursor: "pointer",
+                    }}
+                  />
+                )}
+              </>
+            )}
+
             {!isPortrait && (
               <div
                 aria-hidden
                 className="cb-charm"
                 style={{
                   left: w,
-                  top: -CHARM_TOP,
+                  top: -charmTop,
                 }}
               >
                 <div className="cb-charm-knot" />
-                {/* Rod = short top stub + long middle + short bottom stub. The long middle
-                    only shows while the book is closed; open spreads keep just the stubs. */}
-                <div className="cb-charm-rod" style={{ height: 8 }} />
+                <div className="cb-charm-rod" style={{ height: rodTop }} />
                 <div
                   className="cb-charm-rod cb-charm-rod--mid"
                   style={{
-                    height: h + CHARM_TOP + 2 - 26,
+                    height: rodMid,
                     opacity: isOpenSpread ? 0 : 1,
                     transition: `opacity ${SHIFT_MS}ms ease`,
                   }}
                 />
-                <div className="cb-charm-rod" style={{ height: 18 }} />
+                <div className="cb-charm-rod" style={{ height: rodBottom }} />
                 <div className="cb-charm-hang">
                   <span className="cb-charm-ring" />
                   <span className="cb-charm-ring" />
-                  <svg className="cb-charm-bird" width="26" height="21" viewBox="0 0 32 26">
+                  <svg
+                    className="cb-charm-bird"
+                    width={26 * k}
+                    height={21 * k}
+                    viewBox="0 0 32 26"
+                  >
                     <polygon points="7,13 0,9 1,18" fill="#d96a0f" />
                     <ellipse cx="15" cy="14" rx="10" ry="8" fill="#f28c28" />
                     <circle cx="22" cy="9" r="6" fill="#f28c28" />
@@ -637,7 +1024,12 @@ const playSound = useCallback(() => {
                   </svg>
                   <span className="cb-charm-string" />
                   <span className="cb-charm-bead" />
-                  <svg className="cb-charm-loop" width="15" height="21" viewBox="0 0 22 30">
+                  <svg
+                    className="cb-charm-loop"
+                    width={15 * k}
+                    height={21 * k}
+                    viewBox="0 0 22 30"
+                  >
                     <path
                       d="M11 2 C2 8, 2 22, 11 28 C20 22, 20 8, 11 2 Z"
                       fill="none"
@@ -664,7 +1056,6 @@ const playSound = useCallback(() => {
         </button>
       </div>
 
-      {/* Bottom navigation */}
       <div className="flex w-full max-w-md items-center gap-2 px-4">
         <button
           onClick={goToFirstPage}
@@ -697,7 +1088,6 @@ const playSound = useCallback(() => {
         </button>
       </div>
 
-      {/* Thumbnail strip */}
       {bookPages.some((p) => p.imageUrl) && (
         <div className="flex w-full max-w-3xl gap-2 overflow-x-auto px-4 pb-2">
           {bookPages.map((page, index) => {

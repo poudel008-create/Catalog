@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogIn, LockKeyhole } from "lucide-react";
 
@@ -9,11 +9,10 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+  CardDescription} from "../../components/ui/card"
 
-import { useAuth } from "@/hooks/context/authContext";
-import { loginUser } from "@/services/authServices";
+import { useAuth } from "../../hooks/context/authContext";
+import { loginUser } from "../../services/authServices";
 
 const AdminLogin = () => {
   const navigate = useNavigate();
@@ -24,7 +23,7 @@ const AdminLogin = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleLogin = async (e) => {
+  const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     setLoading(true);

@@ -11,6 +11,8 @@ export interface Catalog {
   title: string;
   description?: string;
   coverImage?: string;
+  category?: string;
+  subCategory?: string;
   published: boolean;
   createdAt: string;
 }

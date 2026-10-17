@@ -38,6 +38,7 @@ export const AuthProvider = ({
     authReducer,
     initialAuthState
   );
+  console.log("AuthProvider rendered");
 
   // RESTORE SESSION
   useEffect(() => {
@@ -109,9 +110,7 @@ export const useAuth = () => {
   const context = useContext(AuthContext);
 
   if (!context) {
-    throw new Error(
-      "useAuth must be used inside AuthProvider"
-    );
+    throw new Error("useAuth must be used inside AuthProvider");
   }
 
   return context;
