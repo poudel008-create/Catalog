@@ -1,3 +1,4 @@
+
 import BASE from "../config/api";
 
 export interface LoginData {
@@ -7,7 +8,7 @@ export interface LoginData {
 
 export interface AuthUser {
   id: string;
-  fullName: string;
+  name: string;
   email: string;
   role: "user" | "recruiter" | "admin";
 }
@@ -16,8 +17,6 @@ export interface LoginResponse {
   user: AuthUser;
   accessToken: string;
 }
-
-
 
 export const loginUser = async (
   loginData: LoginData
@@ -40,7 +39,7 @@ export const loginUser = async (
   return {
     user: {
       id: data.user.id,
-      fullName: data.user.name,
+      name: data.user.name,
       email: data.user.email,
       role: data.user.role,
     },
@@ -64,19 +63,15 @@ export const logoutUser = async () => {
 };
 
 export const refreshToken = async () => {
-  const response = await fetch(`${BASE}/auth/refresh-token`,
-    {
-      method: "POST",
-      credentials: "include",
-    }
-  );
+  const response = await fetch(`${BASE}/auth/refresh-token`, {
+    method: "POST",
+    credentials: "include",
+  });
 
-  const data = await response.json();
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(
-      data.message || "Session expired"
-    );
+    throw new Error(data.message || "Session expired");
   }
 
   return {
