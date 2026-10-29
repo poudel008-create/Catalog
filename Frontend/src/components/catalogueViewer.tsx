@@ -1008,7 +1008,7 @@ const CatalogueViewer = ({
                 aria-hidden
                 className="cb-charm"
                 style={{
-                  left: w,
+                  left: layoutLast ? w / 2 : w,
                   top: -charmTop,
                 }}
               >
