@@ -71,10 +71,12 @@ const CatalogueViewer = ({
   const [currentPage, setCurrentPage] = useState(0);
   const [layoutPage, setLayoutPage] = useState(0);
   const [stageWidth, setStageWidth] = useState(1000);
+  const [stageHeight, setStageHeight] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [measured, setMeasured] = useState(false);
   const [isFlipping, setIsFlipping] = useState(false);
   const [backCoverTransition, setBackCoverTransition] = useState(false);
+  const [backCoverReturning, setBackCoverReturning] = useState(false);
   const [bookHidden, setBookHidden] = useState(false);
   const [spineHost, setSpineHost] = useState<HTMLElement | null>(null);
 
@@ -182,11 +184,14 @@ const CatalogueViewer = ({
 
     const measure = () => {
       const style = window.getComputedStyle(el);
+      const paddingTop = parseFloat(style.paddingTop);
+      const paddingBottom = parseFloat(style.paddingBottom);
       setStageWidth(
         el.clientWidth -
           parseFloat(style.paddingLeft) -
           parseFloat(style.paddingRight)
       );
+      setStageHeight(el.clientHeight - paddingTop - paddingBottom);
     };
     const ro = new ResizeObserver(measure);
     ro.observe(el);
@@ -242,8 +247,18 @@ const CatalogueViewer = ({
   const chromeW = isPortrait ? 120 : 150;
   const maxPageW =
     (stageWidth - chromeW - 4) / ((isPortrait ? 1 : 2) + 2 * STACK_RATIO);
+  const hasThumbnails = bookPages.some((page) => page.imageUrl);
+  const fullscreenControlsHeight =
+    32 + 36 + (hasThumbnails ? 72 : 0) + 24 + 12;
+  const maxPageWByHeight = isFullscreen
+    ? (stageHeight - fullscreenControlsHeight) /
+      (PAGE_RATIO + (isPortrait ? 0 : (CHARM_TOP + CHARM_DROP) / BASE_W))
+    : Infinity;
 
-  const w = Math.max(140, Math.round(Math.min(BASE_W * scale, maxPageW)));
+  const w = Math.max(
+    isFullscreen ? 100 : 140,
+    Math.round(Math.min(BASE_W * scale, maxPageW, maxPageWByHeight))
+  );
   const h = Math.round(w * PAGE_RATIO);
 
   const bookSizeRef = useRef({ w, h });
@@ -340,6 +355,7 @@ const CatalogueViewer = ({
       window.clearTimeout(backCoverTransitionTimerRef.current);
       backCoverTransitionTimerRef.current = null;
     }
+    setBackCoverReturning(false);
     setBackCoverTransition(false);
   };
   const beginBackCoverTransition = () => {
@@ -348,6 +364,7 @@ const CatalogueViewer = ({
       backCoverTransitionTimerRef.current = null;
     }
     setBackCoverTransition(true);
+    setBackCoverReturning(false);
     if (resizing) {
       requestAnimationFrame(finishBackCoverTransition);
       return;
@@ -407,8 +424,16 @@ const CatalogueViewer = ({
       if (currentPage >= total - 1) {
         lockFor(FLIP_MS);
         beginBackCoverTransition();
-        setLayoutPage(total - 3);
-        setCurrentPage(total - 3);
+        const target = total - 3;
+        const flipPage = gToF(target);
+        setBackCoverReturning(true);
+        setLayoutPage(target);
+        setCurrentPage(target);
+        forcedRef.current = target;
+        getPageFlip()?.turnToPage?.(flipPage);
+        window.setTimeout(() => {
+          if (forcedRef.current === target) forcedRef.current = null;
+        }, 400);
         return;
       }
       setLayoutPage(currentPage - 2);
@@ -733,9 +758,15 @@ const CatalogueViewer = ({
   return (
     <div
       ref={stageRef}
-      style={{ "--cb-u": `${k}px` } as CSSProperties}
+      style={{
+        "--cb-u": `${k}px`,
+        height: isFullscreen ? "100dvh" : undefined,
+        boxSizing: isFullscreen ? "border-box" : undefined,
+        overflow: isFullscreen ? "hidden" : undefined,
+        gap: isFullscreen ? 8 : undefined,
+      } as CSSProperties}
       className={`flex w-full flex-col items-center gap-4 ${
-        isFullscreen ? "cb-fs justify-center bg-neutral-900 p-6" : ""
+        isFullscreen ? "cb-fs justify-center bg-neutral-900 p-3" : ""
       }`}
     >
       <CatalogueControls
@@ -847,9 +878,11 @@ const CatalogueViewer = ({
                 inset: 0,
                 overflow: "hidden",
                 zIndex: 1,
-                width: split && layoutLast ? w : undefined,
-                opacity: bookHidden ? 0 : 1,
-                transition: `opacity ${bookHidden ? 160 : 220}ms ease`,
+                width: split && layoutLast && !backCoverTransition ? w : undefined,
+                opacity: bookHidden || backCoverReturning ? 0 : 1,
+                transition: backCoverReturning
+                  ? "none"
+                  : `opacity ${bookHidden ? 160 : 220}ms ease`,
               }}
             >
               {measured && (
@@ -932,6 +965,7 @@ const CatalogueViewer = ({
                     aria-hidden
                     className="cb-spine transition-opacity"
                     style={{
+                      left: w,
                       opacity: isOpenSpread || backCoverTransition ? 1 : 0,
                       transitionDuration: isFlipping ? "120ms" : "450ms",
                     }}
@@ -1015,12 +1049,15 @@ const CatalogueViewer = ({
                 <div className="cb-charm-knot" />
                 <div className="cb-charm-rod" style={{ height: rodTop }} />
                 <div
-                  className="cb-charm-rod cb-charm-rod--mid"
-                  style={{
-                    height: rodMid,
-                    opacity: isOpenSpread ? 0 : 1,
-                  }}
-                />
+  className="cb-charm-rod cb-charm-rod--mid"
+  style={{
+    height: rodMid,
+    opacity: isOpenSpread ? 0 : 1,
+    transition: `opacity 120ms ease ${
+      isOpenSpread ? 0 : layoutFirst ? 650 : 750
+    }ms`,
+  }}
+/>
                 <div className="cb-charm-rod" style={{ height: rodBottom }} />
                 <div className="cb-charm-hang">
                   <span className="cb-charm-ring" />
