@@ -313,7 +313,7 @@ const FlipbookView = ({
         </div>
       </header>
 
-      <div className="flex flex-1 flex-col items-center justify-start overflow-auto py-6">
+      <div className="flex w-full min-w-0 flex-1 flex-col items-stretch justify-start overflow-auto py-6">
         {loading ? (
           <div className="flex flex-col items-center gap-3 pt-24 text-muted-foreground">
             <BookOpen className="h-10 w-10 animate-pulse" />
@@ -325,7 +325,14 @@ const FlipbookView = ({
             <p className="font-medium">No pages in this catalogue yet</p>
           </div>
         ) : (
-          <CatalogueViewer pages={pages} zoom={zoom} soundOn={soundOn} showGrid={showGrid} />
+          <CatalogueViewer
+            pages={pages}
+            title={catalog.title}
+            description={catalog.description}
+            zoom={zoom}
+            soundOn={soundOn}
+            showGrid={showGrid}
+          />
         )}
       </div>
 

@@ -8,26 +8,15 @@ import {
   type ReactNode,
 } from "react";
 import HTMLFlipBook from "react-pageflip";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { createPortal } from "react-dom";
 import {
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  Maximize2,
-  Minimize2,
-  X,
-} from "lucide-react";
+  CatalogueControls,
+  CatalogueGrid,
+  CataloguePageContent,
+  type CataloguePage,
+} from "./catalogueViewerParts";
 import "./catalogueViewer.css";
-
-type CataloguePage = {
-  id: number;
-  title: string;
-  description?: string;
-  imageUrl?: string;
-  blank?: boolean;
-  intro?: boolean;
-  isCover?: boolean;
-};
 
 type CatalogueViewerProps = {
   pages: CataloguePage[];
@@ -55,47 +44,6 @@ const BIND_W = 3;
 const CHARM_TOP = 16;
 const CHARM_DROP = 110;
 
-const PageImage = ({
-  src,
-  alt,
-  eager,
-}: {
-  src: string;
-  alt: string;
-  eager: boolean;
-}) => {
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const imgRef = useRef<HTMLImageElement | null>(null);
-
-  useEffect(() => {
-    const el = imgRef.current;
-    if (el && el.complete && el.naturalWidth > 0) setLoaded(true);
-  });
-
-  if (failed) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-[#fdf9f5] p-4 text-center text-sm text-gray-400">
-        {alt}
-      </div>
-    );
-  }
-
-  return (
-    <div className={`page-image-wrapper ${loaded ? "image-loaded" : ""}`}>
-      <img
-        ref={imgRef}
-        src={src}
-        alt={alt}
-        draggable={false}
-        loading={eager ? "eager" : "lazy"}
-        onLoad={() => setLoaded(true)}
-        onError={() => setFailed(true)}
-      />
-    </div>
-  );
-};
-
 const CatalogueViewer = ({
   pages,
   title,
@@ -107,6 +55,7 @@ const CatalogueViewer = ({
   const bookRef = useRef<any>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const pageSoundRef = useRef<HTMLAudioElement | null>(null);
+  const backCoverTransitionTimerRef = useRef<number | null>(null);
   const liveRef = useRef({ isPortrait: false, total: 0, split: false });
   const lockRef = useRef(0);
   const forcedRef = useRef<number | null>(null);
@@ -116,15 +65,27 @@ const CatalogueViewer = ({
   const soundBufferRef = useRef<AudioBuffer | null>(null);
   const soundOffsetRef = useRef(0);
   const lastSoundRef = useRef(0);
+  const foldSoundRef = useRef(false);
+  const resizingBookRef = useRef(false);
 
   const [currentPage, setCurrentPage] = useState(0);
   const [layoutPage, setLayoutPage] = useState(0);
-  const [lightboxPage, setLightboxPage] = useState<CataloguePage | null>(null);
   const [stageWidth, setStageWidth] = useState(1000);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [measured, setMeasured] = useState(false);
   const [isFlipping, setIsFlipping] = useState(false);
+  const [backCoverTransition, setBackCoverTransition] = useState(false);
   const [bookHidden, setBookHidden] = useState(false);
+  const [spineHost, setSpineHost] = useState<HTMLElement | null>(null);
+
+  useEffect(
+    () => () => {
+      if (backCoverTransitionTimerRef.current !== null) {
+        window.clearTimeout(backCoverTransitionTimerRef.current);
+      }
+    },
+    []
+  );
 
   const inner = useMemo<CataloguePage[]>(() => {
     const list: CataloguePage[] = [
@@ -150,7 +111,6 @@ const CatalogueViewer = ({
     [frontPage, inner, backPage]
   );
 
-  const innerTotal = inner.length;
   const total = bookPages.length;
 
   useEffect(() => {
@@ -220,14 +180,24 @@ const CatalogueViewer = ({
     const el = stageRef.current;
     if (!el) return;
 
-    const ro = new ResizeObserver((entries) => {
-      setStageWidth(entries[0].contentRect.width);
-    });
+    const measure = () => {
+      const style = window.getComputedStyle(el);
+      setStageWidth(
+        el.clientWidth -
+          parseFloat(style.paddingLeft) -
+          parseFloat(style.paddingRight)
+      );
+    };
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
-    setStageWidth(el.clientWidth);
+    window.addEventListener("resize", measure);
+    measure();
     setMeasured(true);
 
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
   }, []);
 
   useEffect(() => {
@@ -247,6 +217,25 @@ const CatalogueViewer = ({
   const split = !isPortrait && total >= 4;
   const scale = zoom / 100;
 
+  useEffect(() => {
+    if (!measured || isPortrait || showGrid || !pages.length) return;
+
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const updateSpineHost = () => {
+      const host = stage.querySelector<HTMLElement>(
+        ".catalogue-book .stf__block"
+      );
+      if (host) setSpineHost(host);
+    };
+    const observer = new MutationObserver(updateSpineHost);
+    observer.observe(stage, { childList: true, subtree: true });
+    updateSpineHost();
+
+    return () => observer.disconnect();
+  }, [isPortrait, measured, pages.length, showGrid]);
+
   soundOnRef.current = soundOn;
   liveRef.current = { isPortrait, total, split };
 
@@ -257,6 +246,33 @@ const CatalogueViewer = ({
   const w = Math.max(140, Math.round(Math.min(BASE_W * scale, maxPageW)));
   const h = Math.round(w * PAGE_RATIO);
 
+  const bookSizeRef = useRef({ w, h });
+  useEffect(() => {
+    const previousSize = bookSizeRef.current;
+    if (previousSize.w === w && previousSize.h === h) return;
+    bookSizeRef.current = { w, h };
+
+    const flipBook = bookRef.current?.pageFlip?.();
+    const element = stageRef.current?.querySelector<HTMLElement>(".catalogue-book");
+    if (!flipBook || !element) return;
+
+    resizingBookRef.current = true;
+    try {
+      const settings = flipBook.getSettings();
+      settings.width = w;
+      settings.height = h;
+      settings.minWidth = w;
+      settings.maxWidth = w;
+      settings.minHeight = h;
+      settings.maxHeight = h;
+      element.style.minWidth = `${w * (isPortrait ? 1 : 2)}px`;
+      element.style.minHeight = `${h}px`;
+      flipBook.update();
+    } finally {
+      resizingBookRef.current = false;
+    }
+  }, [w, h, isPortrait]);
+
   const [settledW, setSettledW] = useState(w);
   useEffect(() => {
     const id = requestAnimationFrame(() => setSettledW(w));
@@ -266,7 +282,7 @@ const CatalogueViewer = ({
 
   const k = w / BASE_W;
   const stackMax = w * STACK_RATIO;
-  const leaves = Math.max(1, (total - 1) / 2);
+  const leaves = Math.max(1, split ? (total - 2) / 2 : (total - 1) / 2);
   const leafUnit = Math.min(STACK_LEAF * k, stackMax / leaves);
   const stackPad = Math.ceil(leafUnit * leaves) + 2;
 
@@ -280,22 +296,36 @@ const CatalogueViewer = ({
 
   const getPageFlip = () => bookRef.current?.pageFlip?.();
 
+  const flipPrev = () => {
+    const flipBook = getPageFlip();
+    if (isPortrait) {
+      const rect = flipBook?.getRender?.()?.getRect?.();
+      const controller = flipBook?.getFlipController?.();
+      if (rect && controller) {
+        controller.flip({ x: rect.left + 10, y: rect.top + 1 });
+        return;
+      }
+    }
+    flipBook?.flipPrev();
+  };
+
   const isFirstPage = currentPage === 0;
   const isLastPage = currentPage >= total - 1;
 
   const layoutFirst = layoutPage === 0;
   const layoutLast = layoutPage >= total - 1;
+  const backCoverSide = isPortrait && currentPage >= total - 1;
 
   const spreadOf = (index: number) =>
     isPortrait || index === 0 ? index : index % 2 === 1 ? index : index - 1;
 
   const fToG = (fl: number) => {
     const count = liveRef.current.total;
-    return fl === 0 ? 1 : fl >= count - 2 ? count - 1 : fl + 1;
+    return Math.min(count - 2, fl + 1);
   };
 
   const gToF = (g: number) => {
-    if (g >= total - 1) return total - 2;
+    if (g >= total - 1) return total - 4;
     if (g <= 1) return 0;
     const left = g % 2 === 1 ? g : g - 1;
     return left - 1;
@@ -305,6 +335,28 @@ const CatalogueViewer = ({
   const lockFor = (ms: number) => {
     lockRef.current = performance.now() + ms;
   };
+  const finishBackCoverTransition = () => {
+    if (backCoverTransitionTimerRef.current !== null) {
+      window.clearTimeout(backCoverTransitionTimerRef.current);
+      backCoverTransitionTimerRef.current = null;
+    }
+    setBackCoverTransition(false);
+  };
+  const beginBackCoverTransition = () => {
+    if (backCoverTransitionTimerRef.current !== null) {
+      window.clearTimeout(backCoverTransitionTimerRef.current);
+      backCoverTransitionTimerRef.current = null;
+    }
+    setBackCoverTransition(true);
+    if (resizing) {
+      requestAnimationFrame(finishBackCoverTransition);
+      return;
+    }
+    backCoverTransitionTimerRef.current = window.setTimeout(
+      finishBackCoverTransition,
+      FLIP_MS + 100
+    );
+  };
 
   const nextPage = () => {
     if (isLastPage) return;
@@ -312,16 +364,26 @@ const CatalogueViewer = ({
       if (locked()) return;
       playSound();
       if (currentPage === 0) {
-        lockFor(FLIP_MS * 0.6);
+        lockFor(FLIP_MS);
         setLayoutPage(1);
         setCurrentPage(1);
         return;
       }
-      setLayoutPage(currentPage >= total - 3 ? total - 1 : currentPage + 2);
+      if (currentPage >= total - 3) {
+        lockFor(FLIP_MS);
+        beginBackCoverTransition();
+        setLayoutPage(total - 1);
+        setCurrentPage(total - 1);
+        return;
+      }
+      setLayoutPage(currentPage + 2);
+      lockFor(FLIP_MS);
       getPageFlip()?.flipNext();
       return;
     }
+    if (locked()) return;
     playSound();
+    lockFor(FLIP_MS);
     setLayoutPage(
       Math.min(
         total - 1,
@@ -337,23 +399,32 @@ const CatalogueViewer = ({
       if (locked()) return;
       playSound();
       if (currentPage === 1) {
-        lockFor(FLIP_MS * 0.6);
+        lockFor(FLIP_MS);
         setLayoutPage(0);
         setCurrentPage(0);
         return;
       }
-      setLayoutPage(currentPage >= total - 1 ? total - 3 : currentPage - 2);
+      if (currentPage >= total - 1) {
+        lockFor(FLIP_MS);
+        beginBackCoverTransition();
+        setLayoutPage(total - 3);
+        setCurrentPage(total - 3);
+        return;
+      }
+      setLayoutPage(currentPage - 2);
       getPageFlip()?.flipPrev();
       return;
     }
+    if (locked()) return;
     playSound();
+    lockFor(FLIP_MS);
     setLayoutPage(
       Math.max(
         0,
         isPortrait ? currentPage - 1 : currentPage <= 1 ? 0 : currentPage - 2
       )
     );
-    getPageFlip()?.flipPrev();
+    flipPrev();
   };
 
   const goToPage = (index: number) => {
@@ -391,17 +462,13 @@ const CatalogueViewer = ({
           setSnap({ front: leaveFront, back: leaveBack });
           setTimeout(() => setSnap({ front: false, back: false }), 150);
         }
-        forcedRef.current = toBack ? null : target;
+        forcedRef.current = target;
         pf?.turnToPage?.(fl);
         setIsFlipping(false);
         setLayoutPage(target);
-        setCurrentPage(toBack ? total - 3 : target);
+        setCurrentPage(target);
         requestAnimationFrame(() => {
           setBookHidden(false);
-          if (toBack) {
-            lastSoundRef.current = performance.now();
-            pf?.flipNext?.();
-          }
         });
         setTimeout(() => {
           forcedRef.current = null;
@@ -409,7 +476,9 @@ const CatalogueViewer = ({
       }, 190);
       return;
     }
+    if (locked()) return;
     playSound();
+    lockFor(FLIP_MS);
     setLayoutPage(spreadOf(g));
     getPageFlip()?.flip(g);
   };
@@ -417,6 +486,7 @@ const CatalogueViewer = ({
   const goToLastPage = () => goToPage(total - 1);
 
   const handleFlip = (event: { data: number }) => {
+    if (resizingBookRef.current) return;
     if (liveRef.current.split) {
       const fl = event.data;
       const forced = forcedRef.current;
@@ -436,11 +506,13 @@ const CatalogueViewer = ({
   };
 
   const handleChangeState = (e: { data: string }) => {
+    if (resizingBookRef.current) return;
     const pf = getPageFlip();
     if (!pf) return;
 
     if (e.data === "read") {
       setIsFlipping(false);
+      foldSoundRef.current = false;
       const idx = pf.getCurrentPageIndex();
       if (liveRef.current.split) {
         const forced = forcedRef.current;
@@ -452,16 +524,21 @@ const CatalogueViewer = ({
         setLayoutPage((prev) => (idx === 0 && prev === 0 ? 0 : fToG(idx)));
       } else {
         setLayoutPage(idx);
+        setCurrentPage(idx);
       }
       return;
     }
     if (e.data === "user_fold") {
+      lockFor(FLIP_MS);
       setIsFlipping(true);
+      foldSoundRef.current = true;
+      playSound();
       return;
     }
     if (e.data !== "flipping") return;
+    lockFor(FLIP_MS);
     setIsFlipping(true);
-    playSound();
+    if (!foldSoundRef.current) playSound();
 
     setTimeout(() => {
       const { isPortrait: portrait, total: count, split: sp } = liveRef.current;
@@ -511,60 +588,7 @@ const CatalogueViewer = ({
   }
 
   if (showGrid) {
-    return (
-      <div className="w-full max-w-6xl px-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {pages.map((page) => (
-            <button
-              key={page.id}
-              onClick={() => setLightboxPage(page)}
-              className="group relative overflow-hidden rounded-lg border bg-white shadow-sm transition hover:shadow-md"
-            >
-              {page.imageUrl ? (
-                <img
-                  src={page.imageUrl}
-                  alt={page.title}
-                  loading="lazy"
-                  className="aspect-[3/4] w-full object-cover"
-                />
-              ) : (
-                <div className="flex aspect-[3/4] items-center justify-center bg-muted">
-                  <span className="text-xs text-muted-foreground">
-                    {page.title}
-                  </span>
-                </div>
-              )}
-              <div className="absolute bottom-0 left-0 right-0 bg-black/50 py-1 text-center text-xs text-white opacity-0 transition group-hover:opacity-100">
-                Page {page.id}
-              </div>
-            </button>
-          ))}
-        </div>
-
-        {lightboxPage && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-            onClick={() => setLightboxPage(null)}
-          >
-            <button
-              aria-label="Close"
-              className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
-              onClick={() => setLightboxPage(null)}
-            >
-              <X className="h-5 w-5" />
-            </button>
-            {lightboxPage.imageUrl && (
-              <img
-                src={lightboxPage.imageUrl}
-                alt={lightboxPage.title}
-                className="max-h-[90vh] max-w-full rounded-lg object-contain"
-                onClick={(e) => e.stopPropagation()}
-              />
-            )}
-          </div>
-        )}
-      </div>
-    );
+    return <CatalogueGrid pages={pages} />;
   }
 
   let shiftX = 0;
@@ -573,7 +597,7 @@ const CatalogueViewer = ({
     else if (layoutLast) shiftX = w / 2;
   }
 
-  const isOpenSpread = !layoutFirst && !layoutLast;
+  const isOpenSpread = currentPage > 0 && currentPage < total - 1;
 
   let baseLeft = 0;
   let baseWidth = w * 2;
@@ -591,66 +615,30 @@ const CatalogueViewer = ({
     0,
     total - layoutPage - (isPortrait || layoutFirst ? 1 : 2)
   );
-  const stackL = isPortrait ? 0 : (behind / 2) * leafUnit;
-  const stackR = (ahead / 2) * leafUnit;
+  const splitBehind =
+    layoutFirst
+      ? 0
+      : layoutLast
+        ? leaves
+        : Math.min(leaves, Math.floor((layoutPage - 1) / 2));
+  const stackL = isPortrait
+    ? backCoverSide
+      ? (behind / 2) * leafUnit
+      : 0
+    : split
+      ? splitBehind * leafUnit
+      : (behind / 2) * leafUnit;
+  const stackR = isPortrait
+    ? backCoverSide
+      ? 0
+      : (ahead / 2) * leafUnit
+    : split
+      ? (leaves - splitBehind) * leafUnit
+      : (ahead / 2) * leafUnit;
   const bindW = Math.max(2, Math.round(BIND_W * k));
-  const stackTransition = resizing
+  const stackTransition = resizing || layoutFirst || layoutLast
     ? "none"
     : `left ${SHIFT_MS}ms ${SHIFT_EASE}, width ${SHIFT_MS}ms ${SHIFT_EASE}`;
-
-  const pageBody = (
-    page: CataloguePage,
-    opts: { cover: boolean; left: boolean; hingeBack: boolean; eager: boolean }
-  ) => (
-    <>
-      {page.intro ? (
-        <div className="cb-intro">
-          <h2 className="cb-intro-title">{page.title}</h2>
-          {page.description && (
-            <p className="cb-intro-desc">{page.description}</p>
-          )}
-        </div>
-      ) : page.blank ? (
-        <div className="h-full w-full" />
-      ) : page.imageUrl ? (
-        <PageImage src={page.imageUrl} alt={page.title} eager={opts.eager} />
-      ) : (
-        <div className="flex h-full w-full flex-col items-center justify-center border border-gray-200">
-          <p className="text-xl font-semibold text-gray-500">{page.title}</p>
-          <p className="mt-1 text-sm text-gray-300">Page {page.id}</p>
-        </div>
-      )}
-
-      {!opts.cover && (
-        <>
-          <div
-            aria-hidden
-            className={`cb-gutter ${
-              opts.left ? "cb-gutter--left" : "cb-gutter--right"
-            }`}
-          />
-          <div
-            aria-hidden
-            className={`cb-edge ${
-              opts.left ? "cb-edge--left" : "cb-edge--right"
-            }`}
-          />
-        </>
-      )}
-
-      {opts.cover && (
-        <>
-          <div
-            aria-hidden
-            className={`cb-hinge ${
-              opts.hingeBack ? "cb-hinge--back" : "cb-hinge--front"
-            }`}
-          />
-          <div aria-hidden className="cb-gloss" />
-        </>
-      )}
-    </>
-  );
 
   const flipItems = split
     ? [
@@ -658,7 +646,6 @@ const CatalogueViewer = ({
         ...bookPages
           .slice(2, total - 1)
           .map((page, i) => ({ page, g: i + 2, ghost: false })),
-        { page: { id: -4, title: "", blank: true } as CataloguePage, g: -2, ghost: false },
       ]
     : bookPages.map((page, index) => ({ page, g: index, ghost: false }));
 
@@ -668,7 +655,9 @@ const CatalogueViewer = ({
     front: ReactNode,
     back: ReactNode,
     onClick: () => void,
-    instant: boolean
+    instant: boolean,
+    onTurnEnd?: () => void,
+    zIndexDelay = FLIP_MS / 2
   ) => (
     <div
       style={{
@@ -683,7 +672,7 @@ const CatalogueViewer = ({
         opacity: bookHidden ? 0 : 1,
         transition: resizing
           ? "none"
-          : `z-index ${instant ? 0 : 0}s linear ${instant ? 0 : FLIP_MS / 2}ms, opacity ${
+          : `z-index ${instant ? 0 : 0}s linear ${instant ? 0 : zIndexDelay}ms, opacity ${
               bookHidden ? 160 : 220
             }ms ease`,
         pointerEvents: over ? "auto" : "none",
@@ -703,6 +692,14 @@ const CatalogueViewer = ({
               ? "none"
               : `transform ${FLIP_MS}ms ${SHIFT_EASE}`,
         }}
+        onTransitionEnd={(event) => {
+          if (
+            event.target === event.currentTarget &&
+            event.propertyName === "transform"
+          ) {
+            onTurnEnd?.();
+          }
+        }}
       >
         <div
           className="cb-page cb-face"
@@ -716,7 +713,7 @@ const CatalogueViewer = ({
             position: "absolute",
             inset: 0,
             backfaceVisibility: "hidden",
-            transform: "rotateY(180deg)",
+             transform: "rotateY(180deg)",
           }}
         >
           {back}
@@ -741,25 +738,21 @@ const CatalogueViewer = ({
         isFullscreen ? "cb-fs justify-center bg-neutral-900 p-6" : ""
       }`}
     >
-      <div className="flex items-center gap-2">
-        <div className="rounded-full bg-background/80 px-3 py-1 text-sm font-medium text-muted-foreground shadow-sm backdrop-blur">
-          {label} · {currentPage + 1} / {total}
-        </div>
-        <button
-          onClick={toggleFullscreen}
-          aria-label="Toggle fullscreen"
-          title="Fullscreen"
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-background shadow-sm transition hover:bg-muted"
-        >
-          {isFullscreen ? (
-            <Minimize2 className="h-4 w-4" />
-          ) : (
-            <Maximize2 className="h-4 w-4" />
-          )}
-        </button>
-      </div>
-
-      <div className="flex items-center gap-4">
+      <CatalogueControls
+        label={label}
+        currentPage={currentPage}
+        total={total}
+        isFirstPage={isFirstPage}
+        isLastPage={isLastPage}
+        isPortrait={isPortrait}
+        isFullscreen={isFullscreen}
+        bookPages={bookPages}
+        onToggleFullscreen={toggleFullscreen}
+        onFirstPage={goToFirstPage}
+        onLastPage={goToLastPage}
+        onSelectPage={goToPage}
+      >
+        <div className="flex items-center gap-4">
         <button
           onClick={previousPage}
           disabled={isFirstPage}
@@ -793,24 +786,32 @@ const CatalogueViewer = ({
             }}
           >
             <div
-  aria-hidden
-  className="cb-base"
-  style={{
-    left: baseLeft,
-    width: baseWidth,
-    transition: stackTransition,
-    opacity: 0,
-    pointerEvents: "none",
-  }}
-/>
+              aria-hidden
+              className="cb-base"
+              style={{
+                left: baseLeft,
+                width: baseWidth,
+                transition: stackTransition,
+                opacity: 0,
+                pointerEvents: "none",
+              }}
+            />
 
             {isPortrait ? (
               <div
                 aria-hidden
-                className="cb-book-binding"
-                style={{ left: baseLeft - bindW, width: bindW }}
+                className={`cb-book-binding ${
+                  backCoverSide ? "cb-book-binding--right" : ""
+                }`}
+                style={{
+                  left: backCoverSide
+                    ? baseLeft + baseWidth
+                    : baseLeft - bindW,
+                  width: bindW,
+                }}
               />
-            ) : (
+            ) : null}
+            {(!isPortrait || backCoverSide) && (
               <div
                 aria-hidden
                 className="cb-book-stack cb-book-stack--left"
@@ -846,18 +847,20 @@ const CatalogueViewer = ({
                 inset: 0,
                 overflow: "hidden",
                 zIndex: 1,
+                width: split && layoutLast ? w : undefined,
                 opacity: bookHidden ? 0 : 1,
                 transition: `opacity ${bookHidden ? 160 : 220}ms ease`,
               }}
             >
-              <style>{`.cb-noshadow .stf__outerShadow,.cb-noshadow .stf__innerShadow,.cb-noshadow .stf__hardShadow,.cb-noshadow .stf__hardInnerShadow{display:none!important}`}</style>
               {measured && (
                 <HTMLFlipBook
-                  key={`${w}x${h}-${isPortrait ? "p" : "l"}`}
+                  key={isPortrait ? "p" : "l"}
                   ref={(instance: any) => {
                     bookRef.current = instance;
                   }}
-                  className="catalogue-book"
+                  className={`catalogue-book ${
+                    backCoverTransition ? "cb-back-cover-transition" : ""
+                  }`}
                   style={{}}
                   width={w}
                   height={h}
@@ -889,7 +892,7 @@ const CatalogueViewer = ({
                         <div
                           key={`${page.id}-${index}`}
                           data-density="soft"
-                          className="relative h-full w-full"
+                          className="cb-page--ghost relative h-full w-full"
                           style={{ background: "transparent" }}
                         />
                       );
@@ -905,30 +908,36 @@ const CatalogueViewer = ({
                       <div
                         key={`${page.id}-${index}`}
                         data-density={isCover ? "hard" : "soft"}
-                        className="cb-page relative h-full w-full overflow-hidden"
+                        className={`cb-page relative h-full w-full overflow-hidden ${
+                          g === total - 2 ? "cb-back-cover-underlay" : ""
+                        }`}
                       >
-                        {pageBody(page, {
-                          cover: isCover,
-                          left: isLeftPage,
-                          hingeBack: !isPortrait && g !== 0,
-                          eager: total <= 80 || Math.abs(g - currentPage) < 8,
-                        })}
+                        <CataloguePageContent
+                          page={page}
+                          cover={isCover}
+                          left={isLeftPage}
+                          hingeBack={!isPortrait && g !== 0}
+                          eager={total <= 80 || Math.abs(g - currentPage) < 8}
+                        />
                       </div>
                     );
                   })}
                 </HTMLFlipBook>
               )}
 
-              {!isPortrait && (
-                <div
-                  aria-hidden
-                  className="cb-spine transition-opacity"
-                  style={{
-                    opacity: isOpenSpread && !isFlipping ? 1 : 0,
-                    transitionDuration: isFlipping ? "120ms" : "450ms",
-                  }}
-                />
-              )}
+              {spineHost &&
+                !isPortrait &&
+                createPortal(
+                  <div
+                    aria-hidden
+                    className="cb-spine transition-opacity"
+                    style={{
+                      opacity: isOpenSpread || backCoverTransition ? 1 : 0,
+                      transitionDuration: isFlipping ? "120ms" : "450ms",
+                    }}
+                  />,
+                  spineHost
+                )}
             </div>
 
             {split && (
@@ -936,38 +945,46 @@ const CatalogueViewer = ({
                 {leafShell(
                   layoutFirst ? 0 : -180,
                   layoutFirst,
-                  pageBody(bookPages[0], {
-                    cover: true,
-                    left: false,
-                    hingeBack: false,
-                    eager: true,
-                  }),
-                  pageBody(bookPages[1], {
-                    cover: false,
-                    left: true,
-                    hingeBack: false,
-                    eager: true,
-                  }),
+                  <CataloguePageContent
+                    page={bookPages[0]}
+                    cover={true}
+                    left={false}
+                    hingeBack={false}
+                    eager={true}
+                  />,
+                  <CataloguePageContent
+                    page={bookPages[1]}
+                    cover={false}
+                    left={true}
+                    hingeBack={false}
+                    eager={true}
+                  />,
                   nextPage,
                   snap.front
                 )}
                 {leafShell(
                   layoutLast ? -180 : 0,
-                  layoutLast,
-                  pageBody({ id: -5, title: "", blank: true }, {
-                    cover: false,
-                    left: false,
-                    hingeBack: false,
-                    eager: true,
-                  }),
-                  pageBody(bookPages[total - 1], {
-                    cover: true,
-                    left: false,
-                    hingeBack: true,
-                    eager: true,
-                  }),
+                  layoutLast || backCoverTransition,
+                  <CataloguePageContent
+                    page={bookPages[total - 2]}
+                    cover={false}
+                    left={false}
+                    hingeBack={false}
+                    eager={true}
+                  />,
+                  <CataloguePageContent
+                    page={bookPages[total - 1]}
+                    cover={true}
+                    left={false}
+                    hingeBack={true}
+                    eager={true}
+                  />,
                   previousPage,
-                  snap.back
+                  snap.back,
+                  backCoverTransition
+                    ? finishBackCoverTransition
+                    : undefined,
+                  0
                 )}
                 {layoutPage === 1 && (
                   <div
@@ -1002,7 +1019,6 @@ const CatalogueViewer = ({
                   style={{
                     height: rodMid,
                     opacity: isOpenSpread ? 0 : 1,
-                    transition: `opacity ${SHIFT_MS}ms ease`,
                   }}
                 />
                 <div className="cb-charm-rod" style={{ height: rodBottom }} />
@@ -1056,71 +1072,7 @@ const CatalogueViewer = ({
         </button>
       </div>
 
-      <div className="flex w-full max-w-md items-center gap-2 px-4">
-        <button
-          onClick={goToFirstPage}
-          disabled={isFirstPage}
-          aria-label="Go to first page"
-          title="First page"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-background shadow-sm transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-30"
-        >
-          <ChevronsLeft className="h-4 w-4" />
-        </button>
-
-        <input
-          type="range"
-          min={0}
-          max={total - 1}
-          value={currentPage}
-          onChange={(e) => goToPage(Number(e.target.value))}
-          aria-label="Jump to page"
-          className="h-1 w-full cursor-pointer accent-primary"
-        />
-
-        <button
-          onClick={goToLastPage}
-          disabled={isLastPage}
-          aria-label="Go to last page"
-          title="Last page"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-background shadow-sm transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-30"
-        >
-          <ChevronsRight className="h-4 w-4" />
-        </button>
-      </div>
-
-      {bookPages.some((p) => p.imageUrl) && (
-        <div className="flex w-full max-w-3xl gap-2 overflow-x-auto px-4 pb-2">
-          {bookPages.map((page, index) => {
-            const active =
-              index === currentPage ||
-              (!isPortrait && !isFirstPage && index === currentPage + 1);
-            return (
-              <button
-                key={`thumb-${page.id}-${index}`}
-                onClick={() => goToPage(index)}
-                aria-label={`Go to page ${index + 1}`}
-                className={`relative h-16 w-12 shrink-0 overflow-hidden rounded border bg-white transition ${
-                  active
-                    ? "ring-2 ring-primary ring-offset-1"
-                    : "opacity-70 hover:opacity-100"
-                }`}
-              >
-                {page.imageUrl && !page.blank ? (
-                  <img
-                    src={page.imageUrl}
-                    alt=""
-                    loading="lazy"
-                    className="h-full w-full object-cover"
-                    draggable={false}
-                  />
-                ) : (
-                  <div className="h-full w-full bg-muted" />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      </CatalogueControls>
     </div>
   );
 };
